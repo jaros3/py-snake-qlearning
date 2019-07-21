@@ -4,14 +4,19 @@ from pos import Pos
 from snake import Snake
 from tkinter import Canvas, Tk
 from dir import Dir
+from brain import Brain
 
 
 class Game:
     SCALE = 20
 
-    def __init__ (self):
-        self.width = 20
-        self.height = 20
+    def __init__ (self) -> None:
+        self.width = 40
+        self.height = 40
+        self.brain = Brain (self)
+        self.reset ()
+
+    def reset (self) -> None:
         self.snake = Snake (self)
         self.apple = Pos.random (self)
 
