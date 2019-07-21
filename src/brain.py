@@ -30,7 +30,7 @@ class Brain:
         final_fully_connected = Dense (4, name = 'final_fully_connected') (final_avg_pool)
         self.output = final_fully_connected
         self.net = keras.Model (inputs = self.input, outputs = self.output)
-        self.net.compile (optimizer = keras.optimizers.Adam (lr = 0.01))
+        # self.net.compile (optimizer = keras.optimizers.Adam (lr = 0.01))
 
     # Based on Inception v4 but smaller in scale
 
@@ -82,7 +82,7 @@ class Brain:
         line4_conv1 = Conv2D (12, (1, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line4_conv1') (input)  # (12, 17, 17)
         line4_conv2 = Conv2D (12, (1, 7), 1, 'same', activation = 'relu', name = f'{prefix}_line4_conv2') (line4_conv1)  # (12, 17, 17)
         line4_conv3 = Conv2D (18, (7, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line4_conv3') (line4_conv2)  # (18, 17, 17)
-        line4_conv4 = Conv2D (18, (1, 7), 1, 'same', activation = 'relu', name = f'{prefix}_line4_conv3') (line4_conv3)  # (18, 17, 17)
+        line4_conv4 = Conv2D (18, (1, 7), 1, 'same', activation = 'relu', name = f'{prefix}_line4_conv4') (line4_conv3)  # (18, 17, 17)
         line4_output = Conv2D (24, (7, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line4') (line4_conv4)  # (24, 17, 17)
         output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (96, 17, 17)
         return output
@@ -95,15 +95,15 @@ class Brain:
         line2_output = Conv2D (12, (3, 3), 2, 'valid', activation = 'relu', name = f'{prefix}_line2') (line2_conv1)  # (12, 8, 8)
         line3_conv1 = Conv2D (24, (1, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line3_conv1') (input)  # (24, 17, 17)
         line3_conv2 = Conv2D (24, (1, 7), 1, 'same', activation = 'relu', name = f'{prefix}_line3_conv2') (line3_conv1)  # (24, 17, 17)
-        line3_conv3 = Conv2D (36, (7, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line3_conv2') (line3_conv2)  # (36, 17, 17)
-        line3_output = Conv2D (36, (3, 3), 2, 'valid', activation = 'relu', name = f'{prefix}_line3_conv3') (line3_conv3)  # (36, 8, 8)
+        line3_conv3 = Conv2D (36, (7, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line3_conv3') (line3_conv2)  # (36, 17, 17)
+        line3_output = Conv2D (36, (3, 3), 2, 'valid', activation = 'relu', name = f'{prefix}_line3') (line3_conv3)  # (36, 8, 8)
         output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output])  # (144, 8, 8)
         return output
 
     @classmethod
     def inception_c (cls, input: Layer, index: int) -> Layer:
         """Process at far away look."""
-        prefix = f'inception_b_{index}'
+        prefix = f'inception_c_{index}'
         line1_avg_pool = AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (144, 8, 8)
         line1_output = Conv2D (24, (1, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line1') (line1_avg_pool)  # (24, 8, 8)
         line2_output = Conv2D (24, (1, 1), 1, 'same', activation = 'relu', name = f'{prefix}_line2') (input)  # (24, 8, 8)

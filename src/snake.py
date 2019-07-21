@@ -31,6 +31,11 @@ class Snake:
         for cell in self.body:
             cell.draw (canvas, 'white')
 
-    def move (self, dir: Dir) -> None:
+    def move (self, dir: Dir) -> bool:
+        head = self.body[0] + dir.offset
         self.body.pop ()
-        self.body.appendleft (self.body[0] + dir.offset)
+        isAlive = True
+        if head.is_outside or head in self.body:
+            isAlive = False
+        self.body.appendleft (head)
+        return isAlive
