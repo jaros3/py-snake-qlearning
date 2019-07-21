@@ -18,6 +18,8 @@ class Pos:
 
     def __add__ (self, other: 'Pos') -> 'Pos':
         return Pos (self.game, self.x + other.x, self.y + other.y)
+    def __sub__ (self, other: 'Pos') -> 'Pos':
+        return Pos (self.game, self.x - other.x, self.y - other.y)
 
     def draw (self, canvas: Canvas, color: str) -> None:
         x = self.x * self.game.SCALE
@@ -26,7 +28,10 @@ class Pos:
 
     @property
     def is_outside (self) -> bool:
-        return self.x < 0 or self.y < 0 or self.x >= self.game.width or self.y >= self.game.height
+        return not self.is_in (0, 0, self.game.width - 1, self.game.height - 1)
+
+    def is_in (self, min_x: int, min_y: int, max_x: int, max_y: int) -> bool:
+        return min_x <= self.x <= max_x and min_y <= self.y <= max_y
 
     def __eq__ (self, other) -> bool:
         return isinstance (other, Pos) and self.x == other.x and self.y == other.y

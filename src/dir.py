@@ -1,5 +1,6 @@
 import typing
 from typing import List
+import random
 
 from pos import Pos
 
@@ -21,3 +22,7 @@ class Dir:
         cls.DOWN: Dir = Dir (Pos (game, 0, 1))
         cls.LEFT: Dir = Dir (Pos (game, -1, 0))
         cls.ALL: List[Dir] = [cls.UP, cls.RIGHT, cls.DOWN, cls.LEFT]
+
+    @classmethod
+    def random (cls) -> 'Dir':
+        return random.choice (cls.ALL)

@@ -1,20 +1,27 @@
-import tensorflow
+import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
 from tensorflow.keras.layers import *
 import typing
 from typing import Tuple
 from sizes import *
+import random
+from dir import Dir
+import numpy as np
 
 if typing.TYPE_CHECKING:
     from .game import Game
 
 
 class Brain:
+    EXPLORATION_CHANCE = 0.05
+    FUTURE_DISCOUNT = 0.95
+    LEARNING_RATE = 0.01
+
     def __init__ (self, game: 'Game') -> None:
         self.game: 'Game' = game
 
-        # (batch, depth, x, y)
+        # (batch, depth, y, x)
         self.input, current = self.stem ()  # (48, 35, 35)
 
         for i in range (3):
@@ -27,10 +34,22 @@ class Brain:
             current = self.inception_c (current, i)  # (144, 8, 8)
 
         final_avg_pool = AveragePooling2D ((8, 8), 1, 'valid', name = 'final_avg_pool') (current)  # (144, 1, 1)
-        final_fully_connected = Dense (4, name = 'final_fully_connected') (final_avg_pool)
-        self.output = final_fully_connected
-        self.net = keras.Model (inputs = self.input, outputs = self.output)
-        # self.net.compile (optimizer = keras.optimizers.Adam (lr = 0.01))
+        final_fully_connected = Conv2D (4, (1, 1), 1, 'valid', name = 'final_fully_connected') (final_avg_pool)
+        self.action_values = final_fully_connected
+        self.estimate_actions = keras.Model (inputs = self.input, outputs = self.action_values)
+        self.estimate_actions.summary ()
+
+        self.reward: tf.Variable = tf.Variable (0.0, trainable = False)
+        self.next_action_value: tf.Variable = tf.Variable (0.0, trainable = False)
+        # noinspection PyTypeChecker
+        delta_weights = self.reward + self.FUTURE_DISCOUNT * self.next_action_value - self.action_values
+        self.q_learning_loss = tf.square (delta_weights) / 2
+
+        optimizer = tf.train.AdamOptimizer (learning_rate = self.LEARNING_RATE)
+        self.optimizer_single_step = optimizer.minimize (self.q_learning_loss)
+
+        self.session = tf.Session ()
+        self.session.run (tf.global_variables_initializer ())
 
     # Based on Inception v4 but smaller in scale
 
@@ -118,3 +137,27 @@ class Brain:
         output = Concatenate (axis = 1) ([
             line1_output, line2_output, line3_fork_a, line3_fork_b, line4_fork_a, line4_fork_b])  # (144, 8, 8)
         return output
+
+    def think (self, sight: np.ndarray) -> Dir:
+        action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
+        print (f'{type (action_values)}: {action_values}')
+        if random.random () < self.EXPLORATION_CHANCE:
+            action_index = random.randrange (len (Dir.ALL))
+        else:
+            action_index = self.argmax (action_values)
+        # action_value = action_values[action_index]
+        return Dir.ALL[action_index]
+
+    @staticmethod
+    def argmax (values) -> float:
+        return max (range (len (values)), key = lambda i: values[i])
+
+    def learn (self, reward: float, last_sight: np.ndarray) -> None:
+        next_action_value = np.max (self.estimate_actions.predict (self.game.sight ()))
+
+        #q_learning_loss = self.q_learning_loss.predict (last_sight, feed_dict = {
+        #    self.reward: reward, self.next_action_value: next_action_value
+        #})
+        self.optimizer_single_step.run (feed_dict = {
+            self.input: last_sight, self.reward: reward, self.next_action_value: next_action_value
+        })

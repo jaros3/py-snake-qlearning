@@ -5,10 +5,17 @@ from snake import Snake
 from tkinter import Canvas, Label, StringVar
 from dir import Dir
 from brain import Brain
+import numpy as np
+from numpy import ndarray
 
 
 class Game:
     SCALE = 20
+    SIGHT_CHANNELS = 2
+    SIGHT_RADIUS = 20
+    SIGHT_DIAMETER = SIGHT_RADIUS * 2 + 1
+    CHANNEL_OBSTACLE = 0
+    CHANNEL_APPLE = 1
 
     def __init__ (self) -> None:
         self.width = 40
@@ -27,8 +34,14 @@ class Game:
 
         text.set (f'Attempt: {self.attempt}\nScore: {self.score}')
 
-    def step (self) -> int:
-        if not self.snake.move (random.choice (Dir.ALL)):
+    def step_and_learn (self) -> None:
+        last_sight = self.sight ()
+        action = self.brain.think (last_sight)
+        reward = self.step (action)
+        self.brain.learn (reward, last_sight)
+
+    def step (self, action: Dir) -> int:
+        if not self.snake.move (action):
             self.reset ()
             return -1
         if self.snake.head == self.apple:
@@ -41,3 +54,23 @@ class Game:
         self.apple = Pos.random (self)
         self.score = 0
         self.attempt += 1
+
+    def sight (self) -> ndarray:
+        sight = np.zeros ((1, self.SIGHT_CHANNELS, self.SIGHT_DIAMETER, self.SIGHT_DIAMETER))
+
+        for cell in self.snake.body:
+            self.set_pixel (sight, cell, self.CHANNEL_OBSTACLE)
+        self.set_pixel (sight, self.apple, self.CHANNEL_APPLE)
+
+        for x in range (-1, self.width + 1):
+            self.set_pixel (sight, Pos (self, x, -1), self.CHANNEL_OBSTACLE)
+            self.set_pixel (sight, Pos (self, x, self.height), self.CHANNEL_OBSTACLE)
+        for y in range (-1, self.height + 1):
+            self.set_pixel (sight, Pos (self, -1, y), self.CHANNEL_OBSTACLE)
+            self.set_pixel (sight, Pos (self, self.width, y), self.CHANNEL_OBSTACLE)
+        return sight
+
+    def set_pixel (self, sight: ndarray, cell: Pos, layer: int) -> None:
+        relative = cell - self.snake.head + Pos (self, self.SIGHT_RADIUS, self.SIGHT_RADIUS)
+        if relative.is_in (0, 0, 2 * self.SIGHT_RADIUS, 2 * self.SIGHT_RADIUS):
+            sight[0, layer, relative.y, relative.x] = 1
