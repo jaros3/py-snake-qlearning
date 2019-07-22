@@ -25,22 +25,34 @@ class Game:
         self.apple = Pos.random (self)
         self.score = 0
         self.attempt = 0
+        self.age = 0
 
-    def draw (self, canvas: Canvas, text: StringVar) -> None:
+    def draw (self, canvas: Canvas) -> None:
         canvas.delete ('all')
         canvas.create_rectangle (0, 0, self.width * self.SCALE, self.height * self.SCALE, fill = 'black')
         self.snake.draw (canvas)
         self.apple.draw (canvas, 'red')
+        self.draw_walls (canvas)
 
-        text.set (f'Attempt: {self.attempt}\nScore: {self.score}')
+    def draw_walls (self, canvas: Canvas) -> None:
+        for x in range (-1, self.width + 1):
+            Pos (self, x, -1).draw (canvas, 'white')
+            Pos (self, x, self.height).draw (canvas, 'white')
+        for y in range (-1, self.height + 1):
+            Pos (self, -1, y).draw (canvas, 'white')
+            Pos (self, self.width, y).draw (canvas, 'white')
+
+    def set_text (self, text: StringVar) -> None:
+        text.set (f'Attempt: {self.attempt}\nScore: {self.score}\nAge: {self.age}')
 
     def step_and_learn (self) -> None:
         last_sight = self.sight ()
-        action = self.brain.think (last_sight)
-        reward = self.step (action)
-        self.brain.learn (reward, last_sight)
+        action_index = self.brain.think (last_sight)
+        reward = self.step (action_index)
+        self.brain.learn (reward, last_sight, action_index)
 
-    def step (self, action: Dir) -> int:
+    def step (self, action_index: int) -> int:
+        action = Dir.ALL[action_index]
         if not self.snake.move (action):
             self.reset ()
             return -1
@@ -53,6 +65,7 @@ class Game:
         self.snake = Snake (self)
         self.apple = Pos.random (self)
         self.score = 0
+        self.age = 0
         self.attempt += 1
 
     def sight (self) -> ndarray:

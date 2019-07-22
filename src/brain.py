@@ -43,8 +43,11 @@ class Brain:
 
         self.reward: tf.Variable = tf.Variable (0.0, trainable = False)
         self.next_action_value: tf.Variable = tf.Variable (0.0, trainable = False)
+        self.next_action_index: tf.Variable = tf.Variable (0, trainable = False, dtype = tf.int32)
+
         # noinspection PyTypeChecker
-        delta_weights = self.reward + self.FUTURE_DISCOUNT * self.next_action_value - self.action_values
+        delta_weights = self.reward + self.FUTURE_DISCOUNT * self.next_action_value - \
+                        tf.layers.Flatten () (self.action_values) [(0, self.next_action_index)]
         regularization_loss = tf.add_n (self.estimate_actions.losses)
         self.q_learning_loss = tf.square (delta_weights) / 2 + regularization_loss
 
@@ -148,26 +151,25 @@ class Brain:
             line1_output, line2_output, line3_fork_a, line3_fork_b, line4_fork_a, line4_fork_b])  # (144, 8, 8)
         return output
 
-    def think (self, sight: np.ndarray) -> Dir:
+    def think (self, sight: np.ndarray) -> int:
         action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
         print (f'{type (action_values)}: {action_values}')
         if random.random () < self.EXPLORATION_CHANCE:
             action_index = random.randrange (len (Dir.ALL))
         else:
             action_index = self.argmax (action_values)
-        # action_value = action_values[action_index]
-        return Dir.ALL[action_index]
+        return action_index
 
     @staticmethod
     def argmax (values) -> float:
         return max (range (len (values)), key = lambda i: values[i])
 
-    def learn (self, reward: float, last_sight: np.ndarray) -> None:
+    def learn (self, reward: float, last_sight: np.ndarray, next_action_index: int) -> None:
         next_action_value = np.max (self.estimate_actions.predict (self.game.sight ()))
 
-        #q_learning_loss = self.q_learning_loss.predict (last_sight, feed_dict = {
-        #    self.reward: reward, self.next_action_value: next_action_value
-        #})
         self.optimizer_single_step.run (feed_dict = {
-            self.input: last_sight, self.reward: reward, self.next_action_value: next_action_value
+            self.input: last_sight,
+            self.reward: reward,
+            self.next_action_value: next_action_value,
+            self.next_action_index: next_action_index
         })

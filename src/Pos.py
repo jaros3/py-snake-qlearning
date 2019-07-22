@@ -22,8 +22,8 @@ class Pos:
         return Pos (self.game, self.x - other.x, self.y - other.y)
 
     def draw (self, canvas: Canvas, color: str) -> None:
-        x = self.x * self.game.SCALE
-        y = self.y * self.game.SCALE
+        x = (self.x - self.game.snake.head.x + self.game.SIGHT_RADIUS) * self.game.SCALE
+        y = (self.y - self.game.snake.head.y + self.game.SIGHT_RADIUS) * self.game.SCALE
         canvas.create_rectangle (x, y, x + self.game.SCALE, y + self.game.SCALE, fill = color)
 
     @property
