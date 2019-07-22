@@ -26,3 +26,6 @@ class Dir:
     @classmethod
     def random (cls) -> 'Dir':
         return random.choice (cls.ALL)
+
+    def is_opposite (self, other: 'Dir') -> bool:
+        return self.offset + other.offset == Pos (self.offset.game, 0, 0)

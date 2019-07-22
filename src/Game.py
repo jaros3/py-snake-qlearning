@@ -20,17 +20,18 @@ class Game:
     def __init__ (self) -> None:
         self.width = 40
         self.height = 40
-        self.brain = Brain (self)
-        self.snake = Snake (self)
-        self.apple = Pos.random (self)
         self.score = 0
         self.attempt = 0
         self.age = 0
+        self.apple = Pos.random (self)
+        self.snake = Snake (self)
+        self.brain = Brain (self)
 
     def draw (self, canvas: Canvas) -> None:
         canvas.delete ('all')
         canvas.create_rectangle (0, 0, self.width * self.SCALE, self.height * self.SCALE, fill = 'black')
         self.snake.draw (canvas)
+        self.brain.draw (canvas)
         self.apple.draw (canvas, 'red')
         self.draw_walls (canvas)
 
@@ -47,17 +48,20 @@ class Game:
 
     def step_and_learn (self) -> None:
         last_sight = self.sight ()
-        action_index = self.brain.think (last_sight)
+        action_index = self.brain.think ()
         reward = self.step (action_index)
         self.brain.learn (reward, last_sight, action_index)
 
     def step (self, action_index: int) -> int:
         action = Dir.ALL[action_index]
         if not self.snake.move (action):
+            print ('Death!')
             self.reset ()
             return -1
         if self.snake.head == self.apple:
+            print ('Apple!')
             self.apple = Pos.random (self)
+            self.score += 1
             return 1
         return 0
 
@@ -67,6 +71,7 @@ class Game:
         self.score = 0
         self.age = 0
         self.attempt += 1
+        self.brain.on_death ()
 
     def sight (self) -> ndarray:
         sight = np.zeros ((1, self.SIGHT_CHANNELS, self.SIGHT_DIAMETER, self.SIGHT_DIAMETER))

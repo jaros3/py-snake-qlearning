@@ -9,6 +9,7 @@ from sizes import *
 import random
 from dir import Dir
 import numpy as np
+from tkinter import Canvas
 
 if typing.TYPE_CHECKING:
     from .game import Game
@@ -56,6 +57,10 @@ class Brain:
 
         self.session = tf.Session ()
         self.session.run (tf.global_variables_initializer ())
+
+        self.estimated_action_values = None
+        self.last_action_taken = None
+        self.estimate (self.game.sight ())
 
     # Based on Inception v4 but smaller in scale
 
@@ -151,21 +156,32 @@ class Brain:
             line1_output, line2_output, line3_fork_a, line3_fork_b, line4_fork_a, line4_fork_b])  # (144, 8, 8)
         return output
 
-    def think (self, sight: np.ndarray) -> int:
-        action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
+    def think (self) -> int:
+        action_values = self.estimated_action_values
         print (f'{type (action_values)}: {action_values}')
         if random.random () < self.EXPLORATION_CHANCE:
             action_index = random.randrange (len (Dir.ALL))
+            print ('Exploring')
         else:
-            action_index = self.argmax (action_values)
+            action_index: int = self.argmax (action_values)
+            if self.last_action_taken is not None and action_index != self.last_action_taken:
+                if Dir.ALL[action_index].is_opposite (Dir.ALL[self.last_action_taken]):
+                    print ('Suicide')
+                else:
+                    print ('Turn')
+            self.last_action_taken: int = action_index
         return action_index
+
+    def on_death (self) -> None:
+        self.last_action_taken = None
 
     @staticmethod
     def argmax (values) -> float:
         return max (range (len (values)), key = lambda i: values[i])
 
     def learn (self, reward: float, last_sight: np.ndarray, next_action_index: int) -> None:
-        next_action_value = np.max (self.estimate_actions.predict (self.game.sight ()))
+        sight = self.game.sight ()
+        next_action_value = np.max (self.estimate_actions.predict (sight))
 
         self.optimizer_single_step.run (feed_dict = {
             self.input: last_sight,
@@ -173,3 +189,20 @@ class Brain:
             self.next_action_value: next_action_value,
             self.next_action_index: next_action_index
         })
+        self.estimate (sight)
+
+    def estimate (self, sight: np.ndarray) -> None:
+        self.estimated_action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
+
+    def draw (self, canvas: Canvas) -> None:
+        for i, dir in enumerate (Dir.ALL):
+            value = self.estimated_action_values[i]
+            color = self.rgb (-value * 255, value * 255, (1 - abs (value)) * 255)
+            (self.game.snake.head + dir.offset).draw (canvas, color)
+
+    @classmethod
+    def rgb (cls, r: float, g: float, b: float) -> str:
+        r = max (0, min (255, int (round (r))))
+        g = max (0, min (255, int (round (g))))
+        b = max (0, min (255, int (round (b))))
+        return f'#{r:02x}{g:02x}{b:02x}'
