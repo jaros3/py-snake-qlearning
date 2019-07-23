@@ -38,3 +38,8 @@ class Snake:
 
     def grow (self) -> None:
         self.body.append (self.body[-1])
+
+    def __str__ (self) -> str:
+        return str (self.body)
+    def __repr__ (self) -> str:
+        return str (self)

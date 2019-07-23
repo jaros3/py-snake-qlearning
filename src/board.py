@@ -37,16 +37,18 @@ class Board:
             Pos (-1, y).draw (canvas, head, 'white')
             Pos (WIDTH, y).draw (canvas, head, 'white')
 
-    def step (self, action_index: int) -> Tuple['Board', int, bool]:
+    def step (self, action_index: int, real_snake: bool) -> Tuple['Board', int, bool]:
         action = Dir.ALL[action_index]
         next_snake, is_alive = self.snake.move (action)
         next_board = Board (self.apple, next_snake)
         if not is_alive:
-            print ('Death!')
+            if real_snake:
+                print ('Death!')
             next_board.reset ()
             reward = -1
         elif self.snake.head == self.apple:
-            print ('Apple!')
+            if real_snake:
+                print ('Apple!')
             next_board.apple = Pos.random ()
             next_snake.grow ()
             reward = 1
@@ -74,3 +76,8 @@ class Board:
         relative = cell - self.snake.head + Pos (SIGHT_RADIUS, SIGHT_RADIUS)
         if relative.is_in (0, 0, 2 * SIGHT_RADIUS, 2 * SIGHT_RADIUS):
             buffer_slice[0, channel, relative.y, relative.x] = 1
+
+    def __str__ (self) -> str:
+        return f'apple={self.apple}, snake={self.snake}'
+    def __repr__ (self) -> str:
+        return str (self)

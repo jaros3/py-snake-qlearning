@@ -43,7 +43,7 @@ class Brain:
         self.best_action_value = tf.reduce_max (action_values, axis = 1, keepdims = True)
 
         q_delta = self.total_future_rewards - single_action_value
-        q_loss = tf.square (q_delta) / 2
+        q_loss = tf.reduce_mean (tf.square (q_delta) / 2)
         regularization_loss = tf.add_n (self.estimate_actions.losses)
         total_loss = q_loss + regularization_loss
 
@@ -60,7 +60,7 @@ class Brain:
     def think (self) -> Tuple[int, bool]:
         turned = False
         action_values = self.predicted_action_values
-        print ([f'{Dir.ALL[i].arrow}{action_values[i]:.02f}' for i in range (self.ACTIONS)])
+        print ([f'{Dir.ALL[i]}{action_values[i]:.02f}' for i in range (self.ACTIONS)])
         if random.random () < self.EXPLORATION_CHANCE:
             action_index = random.randrange (len (Dir.ALL))
             print ('Exploring')
@@ -78,7 +78,7 @@ class Brain:
     def learn (self, memories: Memories) -> None:
         if len (memories.items) < self.BATCH:
             return
-        batch = random.sample (memories.items, self.BATCH)
+        batch = [memories.items[-1]] + random.sample (memories.items, self.BATCH - 1)
 
         total_future_rewards = self.estimate_future (batch)  # (BATCH, 1, 1, 1)
 
@@ -97,7 +97,7 @@ class Brain:
         self.remember_predictions ()
 
     def estimate_future (self, batch: List[Memory]) -> np.ndarray:
-        STEPS = 5
+        STEPS = 20
         tracks: List[List[Memory]] = [[memory] for memory in batch]
         rewards = [memory.reward for memory in batch]
         for step in range (STEPS):
@@ -118,7 +118,7 @@ class Brain:
                     continue
                 today_board = tracks[i][step].next_board
                 action_index = self.argmax (tomorrow_values[i, :, 0, 0])
-                tomorrow_board, reward, is_alive = today_board.step (action_index)
+                tomorrow_board, reward, is_alive = today_board.step (action_index, real_snake = False)
                 tracks[i].append (Memory (today_board, action_index, reward, is_alive, tomorrow_board))
                 rewards[i] += step_discount * reward
         return np.reshape (rewards, (self.BATCH, 1, 1, 1))

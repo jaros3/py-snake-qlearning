@@ -53,7 +53,7 @@ class Game:
     def step (self, action_index: int) -> Tuple[int, bool, Board]:
         self.age += 1
         self.lifetime[self.attempt] += 1
-        next_board, reward, is_alive = self.board.step (action_index)
+        next_board, reward, is_alive = self.board.step (action_index, real_snake = True)
         if reward > 0:
             self.score += 1
         elif not is_alive:

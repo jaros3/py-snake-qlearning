@@ -35,3 +35,8 @@ class Pos:
         return isinstance (other, Pos) and self.x == other.x and self.y == other.y
     def __ne__ (self, other) -> bool:
         return not (self == other)
+
+    def __str__ (self) -> str:
+        return f'({self.x}, {self.y})'
+    def __repr__ (self) -> str:
+        return str (self)

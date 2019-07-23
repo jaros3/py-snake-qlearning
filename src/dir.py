@@ -26,3 +26,8 @@ class Dir:
 
     def is_opposite (self, other: 'Dir') -> bool:
         return self.offset + other.offset == Pos (0, 0)
+
+    def __str__ (self) -> str:
+        return self.arrow
+    def __repr__ (self) -> str:
+        return str (self)
