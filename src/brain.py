@@ -44,11 +44,11 @@ class Brain:
 
         self.reward: tf.Variable = tf.Variable (0.0, trainable = False)
         self.next_action_value: tf.Variable = tf.Variable (0.0, trainable = False)
-        self.next_action_index: tf.Variable = tf.Variable (0, trainable = False, dtype = tf.int32)
+        self.last_action_index: tf.Variable = tf.Variable (0, trainable = False, dtype = tf.int32)
 
         # noinspection PyTypeChecker
         delta_weights = self.reward + self.FUTURE_DISCOUNT * self.next_action_value - \
-                        tf.layers.Flatten () (self.action_values) [(0, self.next_action_index)]
+                        tf.layers.Flatten () (self.action_values) [(0, self.last_action_index)]
         regularization_loss = tf.add_n (self.estimate_actions.losses)
         self.q_learning_loss = tf.square (delta_weights) / 2 + regularization_loss
 
@@ -179,15 +179,15 @@ class Brain:
     def argmax (values) -> float:
         return max (range (len (values)), key = lambda i: values[i])
 
-    def learn (self, reward: float, last_sight: np.ndarray, next_action_index: int) -> None:
+    def learn (self, reward: float, is_alive: bool, last_sight: np.ndarray, last_action_index: int) -> None:
         sight = self.game.sight ()
-        next_action_value = np.max (self.estimate_actions.predict (sight))
+        next_action_value = np.max (self.estimate_actions.predict (sight)) if is_alive else 0.0
 
         self.optimizer_single_step.run (feed_dict = {
             self.input: last_sight,
             self.reward: reward,
             self.next_action_value: next_action_value,
-            self.next_action_index: next_action_index
+            self.last_action_index: last_action_index
         })
         self.estimate (sight)
 

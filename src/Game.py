@@ -1,12 +1,12 @@
-import random
+import numpy as np
+from numpy import ndarray
+from typing import Tuple
+from tkinter import Canvas, Label, StringVar
 
 from pos import Pos
 from snake import Snake
-from tkinter import Canvas, Label, StringVar
 from dir import Dir
 from brain import Brain
-import numpy as np
-from numpy import ndarray
 
 
 class Game:
@@ -49,21 +49,21 @@ class Game:
     def step_and_learn (self) -> None:
         last_sight = self.sight ()
         action_index = self.brain.think ()
-        reward = self.step (action_index)
-        self.brain.learn (reward, last_sight, action_index)
+        reward, is_alive = self.step (action_index)
+        self.brain.learn (reward, is_alive, last_sight, action_index)
 
-    def step (self, action_index: int) -> int:
+    def step (self, action_index: int) -> Tuple[int, bool]:
         action = Dir.ALL[action_index]
         if not self.snake.move (action):
             print ('Death!')
             self.reset ()
-            return -1
+            return -1, False
         if self.snake.head == self.apple:
             print ('Apple!')
             self.apple = Pos.random (self)
             self.score += 1
-            return 1
-        return 0
+            return 1, True
+        return 0, True
 
     def reset (self) -> None:
         self.snake = Snake (self)
