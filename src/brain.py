@@ -137,10 +137,10 @@ class Brain:
     def tiny_brain (self) -> Tuple[Layer, Layer]:
         current = Input (shape = (2, 41, 41), name = 'sight')
         sight = current
-        current = self.conv2d (16, (3, 3), 2, 'valid', name = 'conv1') (current)  # (16, 20, 20)
-        current = self.conv2d (20, (3, 3), 1, 'valid', name = 'conv2') (current)  # (20, 18, 18)
+        current = self.conv2d_bn (current, 16, (3, 3), 2, 'valid', name = 'conv1')  # (16, 20, 20)
+        current = self.conv2d_bn (current, 20, (3, 3), 1, 'valid', name = 'conv2')  # (20, 18, 18)
         current = MaxPooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (20, 9, 9)
-        current = self.conv2d (24, (3, 3), 1, 'valid', name = 'conv3') (current)  # (24, 7, 7)
+        current = self.conv2d_bn (current, 24, (3, 3), 1, 'valid', name = 'conv3')  # (24, 7, 7)
         current = AveragePooling2D ((7, 7), 1, 'valid', name = 'final_avg_pool') (current)  # (24, 1, 1)
         current = Conv2D (
             self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
@@ -166,20 +166,23 @@ class Brain:
         return sight, current
 
     @classmethod
-    def conv2d (cls, filters: int, filter_size: Tuple[int, int], stride: int, padding: str, name: str) -> Layer:
-        return Conv2D (
-            filters, filter_size, stride, padding, name = name, activation = 'relu',
+    def conv2d_bn (cls, current: Layer, filters: int, filter_size: Tuple[int, int], stride: int, padding: str, name: str) -> Layer:
+        current = Conv2D (
+            filters, filter_size, stride, padding, name = name,
             kernel_regularizer = l2 (cls.REGULARIZER), bias_regularizer = l2 (cls.REGULARIZER)
-        )
+        ) (current)
+        current = BatchNormalization (axis = 1, name = f'{name}_bn', trainable = True) (current)
+        current = Activation ('relu', name = f'{name}_relu') (current)
+        return current
 
     @classmethod
     def stem (cls) -> Tuple[Layer, Layer]:
         """Prepare inputs for further processing. Fit spatial dimension, increase channels."""
         sight = layers.Input (name = 'sight', shape = (2, 41, 41))  # (2, 41, 41)
-        stem_conv1 = cls.conv2d (8, (3, 3), 1, 'valid', name = 'stem_conv1') (sight)  # (8, 39, 39)
-        stem_conv2 = cls.conv2d (16, (3, 3), 1, 'valid', name = 'stem_conv2') (stem_conv1)  # (16, 37, 37)
-        stem_max_pool = MaxPooling2D ((3, 3), 1, 'valid', name = 'stem_max_pool') (stem_conv2)  # (16, 35, 35)
-        stem_conv3 = cls.conv2d (32, (3, 3), 1, 'valid', name = 'stem_conv3') (stem_conv2)  # (32, 35, 35)
+        stem_conv1 = cls.conv2d_bn (sight, 8, (3, 3), 1, 'valid', name = 'stem_conv1')  # (8, 39, 39)
+        stem_conv2 = cls.conv2d_bn (stem_conv1, 16, (3, 3), 1, 'valid', name = 'stem_conv2')  # (16, 37, 37)
+        stem_max_pool = MaxPooling2D (stem_conv2, (3, 3), 1, 'valid', name = 'stem_max_pool')  # (16, 35, 35)
+        stem_conv3 = cls.conv2d_bn (stem_conv2, 32, (3, 3), 1, 'valid', name = 'stem_conv3')  # (32, 35, 35)
         stem_output = Concatenate (axis = 1) ([stem_max_pool, stem_conv3])  # (48, 35, 35)
         return sight, stem_output
 
@@ -188,11 +191,11 @@ class Brain:
         """Process at as close level as possible."""
         prefix = f'inception_a_{index}'
         line1_avg_pool = AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (48, 35, 35)
-        line1_output = cls.conv2d (12, (1, 1), 1, 'same', name = f'{prefix}_line1') (line1_avg_pool)  # (12, 35, 35)
-        line2_output = cls.conv2d (12, (1, 1), 1, 'same', name = f'{prefix}_line2') (input)  # (12, 35, 35)
-        line3_conv1 = cls.conv2d (8, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1') (input)  # (8, 35, 35)
-        line3_output = cls.conv2d (12, (3, 3), 1, 'same', name = f'{prefix}_line3') (line3_conv1)  # (12, 35, 35)
-        line4_output = cls.conv2d (12, (3, 3), 1, 'same', name = f'{prefix}_line4') (line3_output)  # (12, 35, 35)
+        line1_output = cls.conv2d_bn (line1_avg_pool, 12, (1, 1), 1, 'same', name = f'{prefix}_line1')  # (12, 35, 35)
+        line2_output = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line2')  # (12, 35, 35)
+        line3_conv1 = cls.conv2d_bn (input, 8, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (8, 35, 35)
+        line3_output = cls.conv2d_bn (line3_conv1, 12, (3, 3), 1, 'same', name = f'{prefix}_line3')  # (12, 35, 35)
+        line4_output = cls.conv2d_bn (line3_output, 12, (3, 3), 1, 'same', name = f'{prefix}_line4')  # (12, 35, 35)
         output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (48, 35, 35)
         return output
 
@@ -200,10 +203,10 @@ class Brain:
     def reduce_a_to_b (cls, input: Layer) -> Layer:
         prefix = 'reduce_a_to_b'
         line1_output = MaxPooling2D ((3, 3), 2, 'valid', name = f'{prefix}_max_pool') (input)  # (48, 17, 17)
-        line2_putput = cls.conv2d (24, (3, 3), 2, 'valid', name = f'{prefix}_line2') (input)  # (24, 17, 17)
-        line3_conv1 = cls.conv2d (12, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1') (input)  # (12, 35, 35)
-        line3_conv2 = cls.conv2d (18, (3, 3), 1, 'same', name = f'{prefix}_line3_conv2') (line3_conv1)  # (18, 35, 35)
-        line3_output = cls.conv2d (24, (3, 3), 2, 'valid', name = f'{prefix}_line3_conv3') (line3_conv2)  # (24, 17, 17)
+        line2_putput = cls.conv2d_bn (input, 24, (3, 3), 2, 'valid', name = f'{prefix}_line2')  # (24, 17, 17)
+        line3_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (12, 35, 35)
+        line3_conv2 = cls.conv2d_bn (line3_conv1, 18, (3, 3), 1, 'same', name = f'{prefix}_line3_conv2')  # (18, 35, 35)
+        line3_output = cls.conv2d_bn (line3_conv2, 24, (3, 3), 2, 'valid', name = f'{prefix}_line3_conv3')  # (24, 17, 17)
         output = Concatenate (axis = 1) ([line1_output, line2_putput, line3_output])  # (96, 17, 17)
         return output
 
@@ -212,16 +215,16 @@ class Brain:
         """Process at middle level."""
         prefix = f'inception_b_{index}'
         line1_avg_pool = AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (96, 17, 17)
-        line1_output = cls.conv2d (24, (1, 1), 1, 'same', name = f'{prefix}_line1') (line1_avg_pool)  # (24, 17, 17)
-        line2_output = cls.conv2d (24, (1, 1), 1, 'same', name = f'{prefix}_line2') (input)  # (24, 17, 17)
-        line3_conv1 = cls.conv2d (12, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1') (input)  # (12, 17, 17)
-        line3_conv2 = cls.conv2d (18, (1, 7), 1, 'same', name = f'{prefix}_line3_conv2') (line3_conv1)  # (18, 17, 17)
-        line3_output = cls.conv2d (24, (7, 1), 1, 'same', name = f'{prefix}_line3') (line3_conv2)  # (24, 17, 17)
-        line4_conv1 = cls.conv2d (12, (1, 1), 1, 'same', name = f'{prefix}_line4_conv1') (input)  # (12, 17, 17)
-        line4_conv2 = cls.conv2d (12, (1, 7), 1, 'same', name = f'{prefix}_line4_conv2') (line4_conv1)  # (12, 17, 17)
-        line4_conv3 = cls.conv2d (18, (7, 1), 1, 'same', name = f'{prefix}_line4_conv3') (line4_conv2)  # (18, 17, 17)
-        line4_conv4 = cls.conv2d (18, (1, 7), 1, 'same', name = f'{prefix}_line4_conv4') (line4_conv3)  # (18, 17, 17)
-        line4_output = cls.conv2d (24, (7, 1), 1, 'same', name = f'{prefix}_line4') (line4_conv4)  # (24, 17, 17)
+        line1_output = cls.conv2d_bn (line1_avg_pool, 24, (1, 1), 1, 'same', name = f'{prefix}_line1')  # (24, 17, 17)
+        line2_output = cls.conv2d_bn (input, 24, (1, 1), 1, 'same', name = f'{prefix}_line2')  # (24, 17, 17)
+        line3_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (12, 17, 17)
+        line3_conv2 = cls.conv2d_bn (line3_conv1,18, (1, 7), 1, 'same', name = f'{prefix}_line3_conv2')  # (18, 17, 17)
+        line3_output = cls.conv2d_bn (line3_conv2, 24, (7, 1), 1, 'same', name = f'{prefix}_line3')  # (24, 17, 17)
+        line4_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line4_conv1')  # (12, 17, 17)
+        line4_conv2 = cls.conv2d_bn (line4_conv1, 12, (1, 7), 1, 'same', name = f'{prefix}_line4_conv2')  # (12, 17, 17)
+        line4_conv3 = cls.conv2d_bn (line4_conv2, 18, (7, 1), 1, 'same', name = f'{prefix}_line4_conv3')  # (18, 17, 17)
+        line4_conv4 = cls.conv2d_bn (line4_conv318, (1, 7), 1, 'same', name = f'{prefix}_line4_conv4')  # (18, 17, 17)
+        line4_output = cls.conv2d_bn (line4_conv4, 24, (7, 1), 1, 'same', name = f'{prefix}_line4')  # (24, 17, 17)
         output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (96, 17, 17)
         return output
 
@@ -229,12 +232,12 @@ class Brain:
     def reduce_b_to_c (cls, input: Layer) -> Layer:
         prefix = 'reduce_b_to_c'
         line1_output = MaxPooling2D ((3, 3), 2, 'valid', name = f'{prefix}_max_pool') (input)  # (96, 8, 8)
-        line2_conv1 = cls.conv2d (12, (1, 1), 1, 'same', name = f'{prefix}_line2_conv1') (input)  # (12, 17, 17)
-        line2_output = cls.conv2d (12, (3, 3), 2, 'valid', name = f'{prefix}_line2') (line2_conv1)  # (12, 8, 8)
-        line3_conv1 = cls.conv2d (24, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1') (input)  # (24, 17, 17)
-        line3_conv2 = cls.conv2d (24, (1, 7), 1, 'same', name = f'{prefix}_line3_conv2') (line3_conv1)  # (24, 17, 17)
-        line3_conv3 = cls.conv2d (36, (7, 1), 1, 'same', name = f'{prefix}_line3_conv3') (line3_conv2)  # (36, 17, 17)
-        line3_output = cls.conv2d (36, (3, 3), 2, 'valid', name = f'{prefix}_line3') (line3_conv3)  # (36, 8, 8)
+        line2_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line2_conv1')  # (12, 17, 17)
+        line2_output = cls.conv2d_bn (line2_conv1, 12, (3, 3), 2, 'valid', name = f'{prefix}_line2')  # (12, 8, 8)
+        line3_conv1 = cls.conv2d_bn (input, 24, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (24, 17, 17)
+        line3_conv2 = cls.conv2d_bn (line3_conv1, 24, (1, 7), 1, 'same', name = f'{prefix}_line3_conv2')  # (24, 17, 17)
+        line3_conv3 = cls.conv2d_bn (line3_conv2, 36, (7, 1), 1, 'same', name = f'{prefix}_line3_conv3')  # (36, 17, 17)
+        line3_output = cls.conv2d_bn (line3_conv3, 36, (3, 3), 2, 'valid', name = f'{prefix}_line3')  # (36, 8, 8)
         output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output])  # (144, 8, 8)
         return output
 
@@ -243,16 +246,16 @@ class Brain:
         """Process at far away look."""
         prefix = f'inception_c_{index}'
         line1_avg_pool = AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (144, 8, 8)
-        line1_output = cls.conv2d (24, (1, 1), 1, 'same', name = f'{prefix}_line1') (line1_avg_pool)  # (24, 8, 8)
-        line2_output = cls.conv2d (24, (1, 1), 1, 'same', name = f'{prefix}_line2') (input)  # (24, 8, 8)
-        line3_conv1 = cls.conv2d (36, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1') (input)  # (36, 8, 8)
-        line3_fork_a = cls.conv2d (24, (1, 3), 1, 'same', name = f'{prefix}_line3_fork_a') (line3_conv1)  # (18, 8, 8)
-        line3_fork_b = cls.conv2d (24, (3, 1), 1, 'same', name = f'{prefix}_line3_fork_b') (line3_conv1)  # (24, 8, 8)
-        line4_conv1 = cls.conv2d (36, (1, 1), 1, 'same', name = f'{prefix}_line4_conv1') (input)  # (36, 8, 8)
-        line4_conv2 = cls.conv2d (48, (1, 3), 1, 'same', name = f'{prefix}_line4_conv2') (line4_conv1)  # (48, 8, 8)
-        line4_conv3 = cls.conv2d (60, (3, 1), 1, 'same', name = f'{prefix}_line4_conv3') (line4_conv2)  # (60, 8, 8)
-        line4_fork_a = cls.conv2d (24, (1, 3), 1, 'same', name = f'{prefix}_line4_fork_a') (line4_conv3)  # (24, 8, 8)
-        line4_fork_b = cls.conv2d (24, (3, 1), 1, 'same', name = f'{prefix}_line4_fork_b') (line4_conv3)  # (24, 8, 8)
+        line1_output = cls.conv2d_bn (line1_avg_pool, 24, (1, 1), 1, 'same', name = f'{prefix}_line1')  # (24, 8, 8)
+        line2_output = cls.conv2d_bn (input, 24, (1, 1), 1, 'same', name = f'{prefix}_line2')  # (24, 8, 8)
+        line3_conv1 = cls.conv2d_bn (input, 36, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (36, 8, 8)
+        line3_fork_a = cls.conv2d_bn (line3_conv1, 24, (1, 3), 1, 'same', name = f'{prefix}_line3_fork_a')  # (18, 8, 8)
+        line3_fork_b = cls.conv2d_bn (line3_conv1, 24, (3, 1), 1, 'same', name = f'{prefix}_line3_fork_b')  # (24, 8, 8)
+        line4_conv1 = cls.conv2d_bn (input, 36, (1, 1), 1, 'same', name = f'{prefix}_line4_conv1')  # (36, 8, 8)
+        line4_conv2 = cls.conv2d_bn (line4_conv1, 48, (1, 3), 1, 'same', name = f'{prefix}_line4_conv2')  # (48, 8, 8)
+        line4_conv3 = cls.conv2d_bn (line4_conv2, 60, (3, 1), 1, 'same', name = f'{prefix}_line4_conv3')  # (60, 8, 8)
+        line4_fork_a = cls.conv2d_bn (line4_conv3, 24, (1, 3), 1, 'same', name = f'{prefix}_line4_fork_a')  # (24, 8, 8)
+        line4_fork_b = cls.conv2d_bn (line4_conv3, 24, (3, 1), 1, 'same', name = f'{prefix}_line4_fork_b')  # (24, 8, 8)
         output = Concatenate (axis = 1) ([
             line1_output, line2_output, line3_fork_a, line3_fork_b, line4_fork_a, line4_fork_b])  # (144, 8, 8)
         return output
