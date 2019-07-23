@@ -11,7 +11,7 @@ from memories import Memory, Memories
 
 
 class Game:
-    LEARN_PERIOD = 5
+    LEARN_PERIOD = 1
 
     def __init__ (self) -> None:
         self.score = 0

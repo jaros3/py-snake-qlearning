@@ -20,12 +20,14 @@ if typing.TYPE_CHECKING:
 
 
 class Brain:
-    BATCH = 10
+    BATCH = 50
     ACTIONS = 4
     EXPLORATION_CHANCE = 0.05
     FUTURE_DISCOUNT = 0.95
     LEARNING_RATE = 0.01
     REGULARIZER = 0.01
+
+    FUTURE_STEPS = 1
 
     def __init__ (self, game: 'Game') -> None:
         self.game: 'Game' = game
@@ -97,10 +99,9 @@ class Brain:
         self.remember_predictions ()
 
     def estimate_future (self, batch: List[Memory]) -> np.ndarray:
-        STEPS = 20
         tracks: List[List[Memory]] = [[memory] for memory in batch]
         rewards = [memory.reward for memory in batch]
-        for step in range (STEPS):
+        for step in range (self.FUTURE_STEPS):
             step_discount = self.FUTURE_DISCOUNT ** (step + 1)
             future_sight = Board.make_buffer (self.BATCH)
             memory: Memory
@@ -113,7 +114,7 @@ class Brain:
             for i in range (self.BATCH):
                 if step >= len (tracks[i]) or not tracks[i][step].is_alive:
                     continue
-                if step == STEPS - 1:
+                if step == self.FUTURE_STEPS - 1:
                     rewards[i] += step_discount * float (np.max (tomorrow_values[i, :, 0, 0]))
                     continue
                 today_board = tracks[i][step].next_board
