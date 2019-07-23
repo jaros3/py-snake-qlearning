@@ -14,7 +14,7 @@ class Pos:
 
     @classmethod
     def random (cls, game: 'Game') -> 'Pos':
-        return Pos (game, x = random.randrange (game.width - 1), y = random.randrange (game.height - 1))
+        return Pos (game, x = random.randrange (game.WIDTH - 1), y = random.randrange (game.HEIGHT - 1))
 
     def __add__ (self, other: 'Pos') -> 'Pos':
         return Pos (self.game, self.x + other.x, self.y + other.y)
@@ -28,7 +28,7 @@ class Pos:
 
     @property
     def is_outside (self) -> bool:
-        return not self.is_in (0, 0, self.game.width - 1, self.game.height - 1)
+        return not self.is_in (0, 0, self.game.WIDTH - 1, self.game.HEIGHT - 1)
 
     def is_in (self, min_x: int, min_y: int, max_x: int, max_y: int) -> bool:
         return min_x <= self.x <= max_x and min_y <= self.y <= max_y

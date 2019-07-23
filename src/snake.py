@@ -34,8 +34,8 @@ class Snake:
     def move (self, dir: Dir) -> bool:
         head = self.body[0] + dir.offset
         self.body.pop ()
-        isAlive = True
+        is_alive = True
         if head.is_outside or head in self.body:
-            isAlive = False
+            is_alive = False
         self.body.appendleft (head)
-        return isAlive
+        return is_alive

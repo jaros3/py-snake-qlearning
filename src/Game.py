@@ -10,6 +10,8 @@ from brain import Brain
 
 
 class Game:
+    WIDTH = 40
+    HEIGHT = 40
     SCALE = 20
     SIGHT_CHANNELS = 2
     SIGHT_RADIUS = 20
@@ -18,8 +20,6 @@ class Game:
     CHANNEL_APPLE = 1
 
     def __init__ (self) -> None:
-        self.width = 40
-        self.height = 40
         self.score = 0
         self.attempt = 0
         self.age = 0
@@ -29,19 +29,19 @@ class Game:
 
     def draw (self, canvas: Canvas) -> None:
         canvas.delete ('all')
-        canvas.create_rectangle (0, 0, self.width * self.SCALE, self.height * self.SCALE, fill = 'black')
+        canvas.create_rectangle (0, 0, self.WIDTH * self.SCALE, self.HEIGHT * self.SCALE, fill = 'black')
         self.snake.draw (canvas)
         self.brain.draw (canvas)
         self.apple.draw (canvas, 'red')
         self.draw_walls (canvas)
 
     def draw_walls (self, canvas: Canvas) -> None:
-        for x in range (-1, self.width + 1):
+        for x in range (-1, self.WIDTH + 1):
             Pos (self, x, -1).draw (canvas, 'white')
-            Pos (self, x, self.height).draw (canvas, 'white')
-        for y in range (-1, self.height + 1):
+            Pos (self, x, self.HEIGHT).draw (canvas, 'white')
+        for y in range (-1, self.HEIGHT + 1):
             Pos (self, -1, y).draw (canvas, 'white')
-            Pos (self, self.width, y).draw (canvas, 'white')
+            Pos (self, self.WIDTH, y).draw (canvas, 'white')
 
     def set_text (self, text: StringVar) -> None:
         text.set (f'Attempt: {self.attempt}\nScore: {self.score}\nAge: {self.age}')
@@ -80,12 +80,12 @@ class Game:
             self.set_pixel (sight, cell, self.CHANNEL_OBSTACLE)
         self.set_pixel (sight, self.apple, self.CHANNEL_APPLE)
 
-        for x in range (-1, self.width + 1):
+        for x in range (-1, self.WIDTH + 1):
             self.set_pixel (sight, Pos (self, x, -1), self.CHANNEL_OBSTACLE)
-            self.set_pixel (sight, Pos (self, x, self.height), self.CHANNEL_OBSTACLE)
-        for y in range (-1, self.height + 1):
+            self.set_pixel (sight, Pos (self, x, self.HEIGHT), self.CHANNEL_OBSTACLE)
+        for y in range (-1, self.HEIGHT + 1):
             self.set_pixel (sight, Pos (self, -1, y), self.CHANNEL_OBSTACLE)
-            self.set_pixel (sight, Pos (self, self.width, y), self.CHANNEL_OBSTACLE)
+            self.set_pixel (sight, Pos (self, self.WIDTH, y), self.CHANNEL_OBSTACLE)
         return sight
 
     def set_pixel (self, sight: ndarray, cell: Pos, layer: int) -> None:
