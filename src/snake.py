@@ -1,20 +1,19 @@
 import typing
-from typing import Deque
-from collections import deque
+from typing import List, Tuple
 from tkinter import Canvas
 
 from pos import Pos
 from dir import Dir
 
-if typing.TYPE_CHECKING:
-    from .game import Game
-
 
 class Snake:
-    def __init__ (self, game: 'Game') -> None:
-        self.game: 'Game' = game
-        pos = Pos.random (game)
-        self.body: Deque[Pos] = deque ([pos for i in range (6)])
+    def __init__ (self, body: List[Pos]) -> None:
+        self.body: List[Pos] = body
+
+    @classmethod
+    def random (cls) -> 'Snake':
+        pos = Pos.random ()
+        return Snake ([pos for i in range (6)])
 
     @property
     def length (self) -> int:
@@ -29,13 +28,13 @@ class Snake:
 
     def draw (self, canvas: Canvas) -> None:
         for cell in self.body:
-            cell.draw (canvas, 'white')
+            cell.draw (canvas, self.head, 'white')
 
-    def move (self, dir: Dir) -> bool:
-        head = self.body[0] + dir.offset
-        self.body.pop ()
-        is_alive = True
-        if head.is_outside or head in self.body:
-            is_alive = False
-        self.body.appendleft (head)
-        return is_alive
+    def move (self, dir: Dir) -> Tuple['Snake', bool]:
+        next_head = self.body[0] + dir.offset
+        is_alive = not next_head.is_outside and next_head not in self.body
+        next_body = [next_head] + self.body[:-1]
+        return Snake (next_body), is_alive
+
+    def grow (self) -> None:
+        self.body.append (self.body[-1])

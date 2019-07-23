@@ -1,18 +1,20 @@
 from tkinter import *
-from game import Game
+
+from const import *
 from dir import Dir
+from game import Game
 
 
 game = Game ()
-Dir.static_init (game)
+Dir.static_init ()
 
 
 with game.brain.session.as_default ():
     window = Tk ()
 
     canvas = Canvas (window, bg = 'black',
-                     width = game.SIGHT_DIAMETER * game.SCALE,
-                     height = game.SIGHT_DIAMETER * game.SCALE)
+                     width = SIGHT_DIAMETER * SCALE,
+                     height = SIGHT_DIAMETER * SCALE)
     # canvas = Canvas (window, bg = 'black', width = game.width * game.SCALE, height = game.height * game.SCALE)
     canvas.pack (fill = X)
     game.draw (canvas)
@@ -27,8 +29,14 @@ with game.brain.session.as_default ():
         game.step_and_learn ()
         game.draw (canvas)
         game.set_text (label_text)
-        window.after (1, game_body)
+        window.after (10, game_body)
 
-    window.after (1, game_body)
+    window.after (10, game_body)
+
+    def second_elapsed ():
+        game.seconds += 1
+        window.after (1000, second_elapsed)
+
+    window.after (1000, second_elapsed)
 
     window.mainloop ()

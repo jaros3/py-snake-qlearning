@@ -7,15 +7,21 @@ import typing
 from typing import Tuple
 from sizes import *
 import random
-from dir import Dir
 import numpy as np
 from tkinter import Canvas
+
+from pos import Pos
+from dir import Dir
+from board import Board
+from memories import Memory, Memories
 
 if typing.TYPE_CHECKING:
     from .game import Game
 
 
 class Brain:
+    BATCH = 10
+    ACTIONS = 4
     EXPLORATION_CHANCE = 0.05
     FUTURE_DISCOUNT = 0.95
     LEARNING_RATE = 0.01
@@ -25,7 +31,112 @@ class Brain:
         self.game: 'Game' = game
 
         # (batch, depth, y, x)
-        self.input, current = self.stem ()  # (48, 35, 35)
+        self.sight, current = self.tiny_brain ()
+        action_values = current
+        self.estimate_actions = keras.Model (inputs = self.sight, outputs = action_values)
+        self.estimate_actions.summary ()
+
+        self.mask = Input (shape = (self.ACTIONS, 1, 1))
+        self.rewards = Input (shape = (1, 1, 1))
+        self.future_values = Input (shape = (1, 1, 1))
+
+        self.single_action_value = tf.reduce_sum (action_values * self.mask, axis = 1, keepdims = True)
+
+        q_delta = self.rewards + self.future_values - self.single_action_value
+        q_loss = tf.square (q_delta) / 2
+        regularization_loss = tf.add_n (self.estimate_actions.losses)
+        total_loss = q_loss + regularization_loss
+
+        optimizer = tf.train.AdamOptimizer (learning_rate = self.LEARNING_RATE)
+        self.optimize_single_step = optimizer.minimize (total_loss)
+
+        self.session = tf.Session ()
+        self.session.run (tf.global_variables_initializer ())
+
+        self.predicted_action_values = None
+        self.last_action_taken = None
+        self.remember_predictions ()
+
+    def think (self) -> Tuple[int, bool]:
+        turned = False
+        action_values = self.predicted_action_values
+        print ([f'{Dir.ALL[i].arrow}{action_values[i]:.02f}' for i in range (self.ACTIONS)])
+        if random.random () < self.EXPLORATION_CHANCE:
+            action_index = random.randrange (len (Dir.ALL))
+            print ('Exploring')
+        else:
+            action_index: int = self.argmax (action_values)
+            if self.last_action_taken is not None and action_index != self.last_action_taken:
+                if Dir.ALL[action_index].is_opposite (Dir.ALL[self.last_action_taken]):
+                    print ('Suicide')
+                else:
+                    print ('Turn')
+                    turned = True
+            self.last_action_taken: int = action_index
+        return action_index, turned
+
+    def learn (self, memories: Memories) -> None:
+        if len (memories.items) < self.BATCH:
+            return
+        batch = random.sample (memories.items, self.BATCH)
+
+        rewards = np.reshape ([memory.reward for memory in batch], (self.BATCH, 1, 1, 1))
+        future_values = self.estimate_future (batch)  # (BATCH, 1, 1, 1)
+
+        prev_sight = Board.make_buffer (self.BATCH)
+        mask = self.zero_mask ()
+        memory: Memory
+        for i, memory in enumerate (batch):
+            memory.prev_board.observe (prev_sight[i:i + 1, :, :, :])
+            mask[i, memory.action_index, 0, 0] = 1
+
+        self.optimize_single_step.run (feed_dict = {
+            self.sight: prev_sight,
+            self.mask: mask,
+            self.rewards: rewards,
+            self.future_values: future_values,
+        })
+        self.remember_predictions ()
+
+    def estimate_future (self, batch: List[Memory]) -> np.ndarray:
+        future_sight = Board.make_buffer (self.BATCH)
+        mask = self.zero_mask ()
+        memory: Memory
+        for i, memory in enumerate (batch):
+            memory.next_board.observe (future_sight[i:i + 1, :, :, :])
+            if memory.is_alive:
+                mask[i, memory.action_index, 0, 0] = 1
+        return self.session.run (self.single_action_value, feed_dict = {
+            self.sight: future_sight,
+            self.mask: mask
+        })  # (BATCH, 1, 1)
+
+    @classmethod
+    def zero_mask (cls) -> np.ndarray:
+        return np.zeros ((cls.BATCH, cls.ACTIONS, 1, 1))
+
+    def remember_predictions (self) -> None:
+        sight = Board.make_buffer (batch = 1)
+        self.game.board.observe (sight)
+        self.predicted_action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
+
+
+    def tiny_brain (self) -> Tuple[Layer, Layer]:
+        current = Input (shape = (2, 41, 41), name = 'sight')
+        sight = current
+        current = self.conv2d (16, (3, 3), 2, 'valid', name = 'conv1') (current)  # (16, 20, 20)
+        current = self.conv2d (20, (3, 3), 1, 'valid', name = 'conv2') (current)  # (20, 18, 18)
+        current = MaxPooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (20, 9, 9)
+        current = self.conv2d (24, (3, 3), 1, 'valid', name = 'conv3') (current)  # (24, 7, 7)
+        current = AveragePooling2D ((7, 7), 1, 'valid', name = 'final_avg_pool') (current)  # (24, 1, 1)
+        current = Conv2D (
+            self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
+        return sight, current
+
+    # Based on Inception v4 but smaller in scale
+
+    def inception_brain (self) -> Tuple[Layer, Layer]:
+        sight, current = self.stem ()  # (48, 35, 35)
 
         for i in range (1):
             current = self.inception_a (current, i)  # (48, 35, 35)
@@ -36,33 +147,10 @@ class Brain:
         for i in range (1):
             current = self.inception_c (current, i)  # (144, 8, 8)
 
-        final_avg_pool = AveragePooling2D ((8, 8), 1, 'valid', name = 'final_avg_pool') (current)  # (144, 1, 1)
-        final_fully_connected = Conv2D (4, (1, 1), 1, 'valid', name = 'final_fully_connected') (final_avg_pool)
-        self.action_values = final_fully_connected
-        self.estimate_actions = keras.Model (inputs = self.input, outputs = self.action_values)
-        self.estimate_actions.summary ()
-
-        self.reward: tf.Variable = tf.Variable (0.0, trainable = False)
-        self.next_action_value: tf.Variable = tf.Variable (0.0, trainable = False)
-        self.last_action_index: tf.Variable = tf.Variable (0, trainable = False, dtype = tf.int32)
-
-        # noinspection PyTypeChecker
-        delta_weights = self.reward + self.FUTURE_DISCOUNT * self.next_action_value - \
-                        tf.layers.Flatten () (self.action_values) [(0, self.last_action_index)]
-        regularization_loss = tf.add_n (self.estimate_actions.losses)
-        self.q_learning_loss = tf.square (delta_weights) / 2 + regularization_loss
-
-        optimizer = tf.train.AdamOptimizer (learning_rate = self.LEARNING_RATE)
-        self.optimizer_single_step = optimizer.minimize (self.q_learning_loss)
-
-        self.session = tf.Session ()
-        self.session.run (tf.global_variables_initializer ())
-
-        self.estimated_action_values = None
-        self.last_action_taken = None
-        self.estimate (self.game.sight ())
-
-    # Based on Inception v4 but smaller in scale
+        current = AveragePooling2D ((8, 8), 1, 'valid', name = 'final_avg_pool') (current)  # (144, 1, 1)
+        current = Conv2D (
+            self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
+        return sight, current
 
     @classmethod
     def conv2d (cls, filters: int, filter_size: Tuple[int, int], stride: int, padding: str, name: str) -> Layer:
@@ -74,13 +162,13 @@ class Brain:
     @classmethod
     def stem (cls) -> Tuple[Layer, Layer]:
         """Prepare inputs for further processing. Fit spatial dimension, increase channels."""
-        input = layers.Input (name = 'input', shape = (2, 41, 41))  # (2, 41, 41)
-        stem_conv1 = cls.conv2d (8, (3, 3), 1, 'valid', name = 'stem_conv1') (input)  # (8, 39, 39)
+        sight = layers.Input (name = 'sight', shape = (2, 41, 41))  # (2, 41, 41)
+        stem_conv1 = cls.conv2d (8, (3, 3), 1, 'valid', name = 'stem_conv1') (sight)  # (8, 39, 39)
         stem_conv2 = cls.conv2d (16, (3, 3), 1, 'valid', name = 'stem_conv2') (stem_conv1)  # (16, 37, 37)
         stem_max_pool = MaxPooling2D ((3, 3), 1, 'valid', name = 'stem_max_pool') (stem_conv2)  # (16, 35, 35)
         stem_conv3 = cls.conv2d (32, (3, 3), 1, 'valid', name = 'stem_conv3') (stem_conv2)  # (32, 35, 35)
         stem_output = Concatenate (axis = 1) ([stem_max_pool, stem_conv3])  # (48, 35, 35)
-        return input, stem_output
+        return sight, stem_output
 
     @classmethod
     def inception_a (cls, input: Layer, index: int) -> Layer:
@@ -156,22 +244,6 @@ class Brain:
             line1_output, line2_output, line3_fork_a, line3_fork_b, line4_fork_a, line4_fork_b])  # (144, 8, 8)
         return output
 
-    def think (self) -> int:
-        action_values = self.estimated_action_values
-        print (f'{type (action_values)}: {action_values}')
-        if random.random () < self.EXPLORATION_CHANCE:
-            action_index = random.randrange (len (Dir.ALL))
-            print ('Exploring')
-        else:
-            action_index: int = self.argmax (action_values)
-            if self.last_action_taken is not None and action_index != self.last_action_taken:
-                if Dir.ALL[action_index].is_opposite (Dir.ALL[self.last_action_taken]):
-                    print ('Suicide')
-                else:
-                    print ('Turn')
-            self.last_action_taken: int = action_index
-        return action_index
-
     def on_death (self) -> None:
         self.last_action_taken = None
 
@@ -179,30 +251,15 @@ class Brain:
     def argmax (values) -> float:
         return max (range (len (values)), key = lambda i: values[i])
 
-    def learn (self, reward: float, is_alive: bool, last_sight: np.ndarray, last_action_index: int) -> None:
-        sight = self.game.sight ()
-        next_action_value = np.max (self.estimate_actions.predict (sight)) if is_alive else 0.0
-
-        self.optimizer_single_step.run (feed_dict = {
-            self.input: last_sight,
-            self.reward: reward,
-            self.next_action_value: next_action_value,
-            self.last_action_index: last_action_index
-        })
-        self.estimate (sight)
-
-    def estimate (self, sight: np.ndarray) -> None:
-        self.estimated_action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
-
-    def draw (self, canvas: Canvas) -> None:
+    def draw (self, canvas: Canvas, head: Pos) -> None:
         for i, dir in enumerate (Dir.ALL):
-            value = self.estimated_action_values[i]
-            color = self.rgb (-value * 255, value * 255, (1 - abs (value)) * 255)
-            (self.game.snake.head + dir.offset).draw (canvas, color)
+            value = self.predicted_action_values[i]
+            color = self.rgb (-2 * value - 1, 2 * value + 1, 1 - 2 * abs (value + 0.5))
+            (head + dir.offset).draw (canvas, head, color)
 
     @classmethod
     def rgb (cls, r: float, g: float, b: float) -> str:
-        r = max (0, min (255, int (round (r))))
-        g = max (0, min (255, int (round (g))))
-        b = max (0, min (255, int (round (b))))
+        r = max (0, min (255, int (round (r * 255))))
+        g = max (0, min (255, int (round (g * 255))))
+        b = max (0, min (255, int (round (b * 255))))
         return f'#{r:02x}{g:02x}{b:02x}'

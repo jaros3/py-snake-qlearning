@@ -2,33 +2,31 @@ import random
 import typing
 from tkinter import Canvas
 
-if typing.TYPE_CHECKING:
-    from .game import Game
+from const import *
 
 
 class Pos:
-    def __init__ (self, game: 'Game', x: int, y: int) -> None:
-        self.game: 'Game' = game
+    def __init__ (self, x: int, y: int) -> None:
         self.x: int = x
         self.y: int = y
 
     @classmethod
-    def random (cls, game: 'Game') -> 'Pos':
-        return Pos (game, x = random.randrange (game.WIDTH - 1), y = random.randrange (game.HEIGHT - 1))
+    def random (cls) -> 'Pos':
+        return Pos (x = random.randrange (WIDTH - 1), y = random.randrange (HEIGHT - 1))
 
     def __add__ (self, other: 'Pos') -> 'Pos':
-        return Pos (self.game, self.x + other.x, self.y + other.y)
+        return Pos (self.x + other.x, self.y + other.y)
     def __sub__ (self, other: 'Pos') -> 'Pos':
-        return Pos (self.game, self.x - other.x, self.y - other.y)
+        return Pos (self.x - other.x, self.y - other.y)
 
-    def draw (self, canvas: Canvas, color: str) -> None:
-        x = (self.x - self.game.snake.head.x + self.game.SIGHT_RADIUS) * self.game.SCALE
-        y = (self.y - self.game.snake.head.y + self.game.SIGHT_RADIUS) * self.game.SCALE
-        canvas.create_rectangle (x, y, x + self.game.SCALE, y + self.game.SCALE, fill = color)
+    def draw (self, canvas: Canvas, head: 'Pos', color: str) -> None:
+        x = (self.x - head.x + SIGHT_RADIUS) * SCALE
+        y = (self.y - head.y + SIGHT_RADIUS) * SCALE
+        canvas.create_rectangle (x, y, x + SCALE, y + SCALE, fill = color)
 
     @property
     def is_outside (self) -> bool:
-        return not self.is_in (0, 0, self.game.WIDTH - 1, self.game.HEIGHT - 1)
+        return not self.is_in (0, 0, WIDTH - 1, HEIGHT - 1)
 
     def is_in (self, min_x: int, min_y: int, max_x: int, max_y: int) -> bool:
         return min_x <= self.x <= max_x and min_y <= self.y <= max_y
