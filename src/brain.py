@@ -37,12 +37,12 @@ class Brain:
         self.estimate_actions.summary ()
 
         self.mask = Input (shape = (self.ACTIONS, 1, 1))
-        self.rewards = Input (shape = (1, 1, 1))
-        self.future_values = Input (shape = (1, 1, 1))
+        self.total_future_rewards = Input (shape = (1, 1, 1))
 
-        self.single_action_value = tf.reduce_sum (action_values * self.mask, axis = 1, keepdims = True)
+        single_action_value = tf.reduce_sum (action_values * self.mask, axis = 1, keepdims = True)
+        self.best_action_value = tf.reduce_max (action_values, axis = 1, keepdims = True)
 
-        q_delta = self.rewards + self.future_values - self.single_action_value
+        q_delta = self.total_future_rewards - single_action_value
         q_loss = tf.square (q_delta) / 2
         regularization_loss = tf.add_n (self.estimate_actions.losses)
         total_loss = q_loss + regularization_loss
@@ -80,8 +80,7 @@ class Brain:
             return
         batch = random.sample (memories.items, self.BATCH)
 
-        rewards = np.reshape ([memory.reward for memory in batch], (self.BATCH, 1, 1, 1))
-        future_values = self.estimate_future (batch)  # (BATCH, 1, 1, 1)
+        total_future_rewards = self.estimate_future (batch)  # (BATCH, 1, 1, 1)
 
         prev_sight = Board.make_buffer (self.BATCH)
         mask = self.zero_mask ()
@@ -93,23 +92,36 @@ class Brain:
         self.optimize_single_step.run (feed_dict = {
             self.sight: prev_sight,
             self.mask: mask,
-            self.rewards: rewards,
-            self.future_values: future_values,
+            self.total_future_rewards: total_future_rewards,
         })
         self.remember_predictions ()
 
     def estimate_future (self, batch: List[Memory]) -> np.ndarray:
-        future_sight = Board.make_buffer (self.BATCH)
-        mask = self.zero_mask ()
-        memory: Memory
-        for i, memory in enumerate (batch):
-            memory.next_board.observe (future_sight[i:i + 1, :, :, :])
-            if memory.is_alive:
-                mask[i, memory.action_index, 0, 0] = 1
-        return self.session.run (self.single_action_value, feed_dict = {
-            self.sight: future_sight,
-            self.mask: mask
-        })  # (BATCH, 1, 1)
+        STEPS = 5
+        tracks: List[List[Memory]] = [[memory] for memory in batch]
+        rewards = [memory.reward for memory in batch]
+        for step in range (STEPS):
+            step_discount = self.FUTURE_DISCOUNT ** (step + 1)
+            future_sight = Board.make_buffer (self.BATCH)
+            memory: Memory
+            for i in range (self.BATCH):
+                if step >= len (tracks[i]) or not tracks[i][step].is_alive:
+                    continue
+                tracks[i][step].next_board.observe (future_sight[i:i + 1, :, :, :])
+            tomorrow_values = self.estimate_actions.predict (future_sight)  # (BATCH, ACTIONS, 1, 1)
+
+            for i in range (self.BATCH):
+                if step >= len (tracks[i]) or not tracks[i][step].is_alive:
+                    continue
+                if step == STEPS - 1:
+                    rewards[i] += step_discount * float (np.max (tomorrow_values[i, :, 0, 0]))
+                    continue
+                today_board = tracks[i][step].next_board
+                action_index = self.argmax (tomorrow_values[i, :, 0, 0])
+                tomorrow_board, reward, is_alive = today_board.step (action_index)
+                tracks[i].append (Memory (today_board, action_index, reward, is_alive, tomorrow_board))
+                rewards[i] += step_discount * reward
+        return np.reshape (rewards, (self.BATCH, 1, 1, 1))
 
     @classmethod
     def zero_mask (cls) -> np.ndarray:
@@ -248,7 +260,7 @@ class Brain:
         self.last_action_taken = None
 
     @staticmethod
-    def argmax (values) -> float:
+    def argmax (values) -> int:
         return max (range (len (values)), key = lambda i: values[i])
 
     def draw (self, canvas: Canvas, head: Pos) -> None:
