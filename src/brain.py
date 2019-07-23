@@ -27,13 +27,13 @@ class Brain:
         # (batch, depth, y, x)
         self.input, current = self.stem ()  # (48, 35, 35)
 
-        for i in range (3):
+        for i in range (1):
             current = self.inception_a (current, i)  # (48, 35, 35)
         current = self.reduce_a_to_b (current)  # (96, 17, 17)
-        for i in range (3):
+        for i in range (1):
             current = self.inception_b (current, i)  # (96, 17, 17)
         current = self.reduce_b_to_c (current)  # (144, 8, 8)
-        for i in range (3):
+        for i in range (1):
             current = self.inception_c (current, i)  # (144, 8, 8)
 
         final_avg_pool = AveragePooling2D ((8, 8), 1, 'valid', name = 'final_avg_pool') (current)  # (144, 1, 1)
