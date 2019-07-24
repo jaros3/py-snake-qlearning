@@ -25,7 +25,7 @@ class Brain:
     EXPLORATION_CHANCE = 0.05
     FUTURE_DISCOUNT = 0.95
     LEARNING_RATE = 0.01
-    REGULARIZER = 0.01
+    REGULARIZER = 1e-5
 
     FUTURE_STEPS = 1
 
@@ -171,7 +171,9 @@ class Brain:
             filters, filter_size, stride, padding, name = name,
             kernel_regularizer = l2 (cls.REGULARIZER), bias_regularizer = l2 (cls.REGULARIZER)
         ) (current)
-        current = BatchNormalization (axis = 1, name = f'{name}_bn', trainable = True) (current)
+        current = BatchNormalization (
+            axis = 1, name = f'{name}_bn', trainable = True,
+            beta_regularizer = l2 (cls.REGULARIZER), gamma_regularizer = l2 (cls.REGULARIZER)) (current)
         current = Activation ('relu', name = f'{name}_relu') (current)
         return current
 
