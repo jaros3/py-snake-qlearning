@@ -27,7 +27,7 @@ class Brain:
     LEARNING_RATE = 0.01
     REGULARIZER = 1e-5
 
-    FUTURE_STEPS = 1
+    FUTURE_STEPS = 10
 
     def __init__ (self, game: 'Game') -> None:
         self.game: 'Game' = game
@@ -78,9 +78,9 @@ class Brain:
         return action_index, turned
 
     def learn (self, memories: Memories) -> None:
-        if len (memories.items) < self.BATCH:
+        if len (memories.items) < self.BATCH + self.FUTURE_STEPS:
             return
-        batch = [memories.items[-1]] + random.sample (memories.items, self.BATCH - 1)
+        batch = random.sample (memories.items[:-self.FUTURE_STEPS], self.BATCH)
 
         total_future_rewards = self.estimate_future (batch)  # (BATCH, 1, 1, 1)
 
@@ -100,28 +100,29 @@ class Brain:
 
     def estimate_future (self, batch: List[Memory]) -> np.ndarray:
         tracks: List[List[Memory]] = [[memory] for memory in batch]
+        still_alive: List[bool] = []
         rewards = [memory.reward for memory in batch]
-        for step in range (self.FUTURE_STEPS):
-            step_discount = self.FUTURE_DISCOUNT ** (step + 1)
-            future_sight = Board.make_buffer (self.BATCH)
-            memory: Memory
-            for i in range (self.BATCH):
-                if step >= len (tracks[i]) or not tracks[i][step].is_alive:
-                    continue
-                tracks[i][step].next_board.observe (future_sight[i:i + 1, :, :, :])
-            tomorrow_values = self.estimate_actions.predict (future_sight)  # (BATCH, ACTIONS, 1, 1)
-
-            for i in range (self.BATCH):
-                if step >= len (tracks[i]) or not tracks[i][step].is_alive:
-                    continue
+        future_sight = Board.make_buffer (self.BATCH)
+        for i in range (self.BATCH):
+            for step in range (self.FUTURE_STEPS):
+                step_discount = self.FUTURE_DISCOUNT ** (step + 1)
+                if not tracks[i][step].is_alive:
+                    still_alive.append (False)
+                    break
                 if step == self.FUTURE_STEPS - 1:
-                    rewards[i] += step_discount * float (np.max (tomorrow_values[i, :, 0, 0]))
-                    continue
-                today_board = tracks[i][step].next_board
-                action_index = self.argmax (tomorrow_values[i, :, 0, 0])
-                tomorrow_board, reward, is_alive = today_board.step (action_index, real_snake = False)
-                tracks[i].append (Memory (today_board, action_index, reward, is_alive, tomorrow_board))
-                rewards[i] += step_discount * reward
+                    still_alive.append (True)
+                    tracks[i][step].next_board.observe (future_sight[i:i + 1, :, :, :])
+                    break
+                next_memory = self.game.memories.items[tracks[i][step].index + 1]
+                tracks[i].append (next_memory)
+                rewards[i] += next_memory.reward * step_discount
+
+        last_day_values = self.estimate_actions.predict (future_sight)  # (BATCH, ACTIONS, 1, 1)
+
+        last_step_discount = self.FUTURE_DISCOUNT ** self.FUTURE_STEPS
+        for i in range (self.BATCH):
+            if still_alive[i]:
+                rewards[i] += last_step_discount * float (np.max (last_day_values[i, :, 0, 0]))
         return np.reshape (rewards, (self.BATCH, 1, 1, 1))
 
     @classmethod

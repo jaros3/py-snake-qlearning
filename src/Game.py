@@ -44,7 +44,7 @@ class Game:
         if turned:
             self.turns[self.attempt] += 1
         reward, is_alive, next_board = self.step (action_index)
-        self.memories.items.append (Memory (self.board, action_index, reward, is_alive, next_board))
+        self.memories.items.append (Memory (len (self.memories.items), self.board, action_index, reward, is_alive, next_board))
         self.current_step += 1
         if self.current_step % self.LEARN_PERIOD == 0:
             self.brain.learn (self.memories)

@@ -5,7 +5,8 @@ from board import Board
 
 
 class Memory:
-    def __init__ (self, prev_board: Board, action_index: int, reward: int, is_alive: bool, next_board: Board) -> None:
+    def __init__ (self, index: int, prev_board: Board, action_index: int, reward: int, is_alive: bool, next_board: Board) -> None:
+        self.index = index
         self.prev_board: Board = prev_board
         self.action_index: int = action_index
         self.reward: int = reward
