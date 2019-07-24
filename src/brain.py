@@ -20,9 +20,9 @@ if typing.TYPE_CHECKING:
 
 
 class Brain:
-    BATCH = 50
+    BATCH = 40
     ACTIONS = 4
-    EXPLORATION_CHANCE = 0.05
+    EXPLORATION_CHANCE = 0.03
     FUTURE_DISCOUNT = 0.95
     LEARNING_RATE = 0.01
     REGULARIZER = 1e-5
@@ -33,7 +33,7 @@ class Brain:
         self.game: 'Game' = game
 
         # (batch, depth, y, x)
-        self.sight, current = self.tiny_brain ()
+        self.sight, current = self.inception_brain ()
         action_values = current
         self.estimate_actions = keras.Model (inputs = self.sight, outputs = action_values)
         self.estimate_actions.summary ()
@@ -47,7 +47,7 @@ class Brain:
         q_delta = self.total_future_rewards - single_action_value
         q_loss = tf.reduce_mean (tf.square (q_delta) / 2)
         regularization_loss = tf.add_n (self.estimate_actions.losses)
-        total_loss = q_loss + regularization_loss
+        total_loss = q_loss # + regularization_loss
 
         optimizer = tf.train.AdamOptimizer (learning_rate = self.LEARNING_RATE)
         self.optimize_single_step = optimizer.minimize (total_loss)
@@ -140,7 +140,7 @@ class Brain:
         sight = current
         current = self.conv2d_bn (current, 16, (3, 3), 2, 'valid', name = 'conv1')  # (16, 20, 20)
         current = self.conv2d_bn (current, 20, (3, 3), 1, 'valid', name = 'conv2')  # (20, 18, 18)
-        current = MaxPooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (20, 9, 9)
+        current = AveragePooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (20, 9, 9)
         current = self.conv2d_bn (current, 24, (3, 3), 1, 'valid', name = 'conv3')  # (24, 7, 7)
         current = AveragePooling2D ((7, 7), 1, 'valid', name = 'final_avg_pool') (current)  # (24, 1, 1)
         current = Conv2D (
@@ -184,7 +184,7 @@ class Brain:
         sight = layers.Input (name = 'sight', shape = (2, 41, 41))  # (2, 41, 41)
         stem_conv1 = cls.conv2d_bn (sight, 8, (3, 3), 1, 'valid', name = 'stem_conv1')  # (8, 39, 39)
         stem_conv2 = cls.conv2d_bn (stem_conv1, 16, (3, 3), 1, 'valid', name = 'stem_conv2')  # (16, 37, 37)
-        stem_max_pool = MaxPooling2D (stem_conv2, (3, 3), 1, 'valid', name = 'stem_max_pool')  # (16, 35, 35)
+        stem_max_pool = MaxPooling2D ((3, 3), 1, 'valid', name = 'stem_max_pool') (stem_conv2)  # (16, 35, 35)
         stem_conv3 = cls.conv2d_bn (stem_conv2, 32, (3, 3), 1, 'valid', name = 'stem_conv3')  # (32, 35, 35)
         stem_output = Concatenate (axis = 1) ([stem_max_pool, stem_conv3])  # (48, 35, 35)
         return sight, stem_output
@@ -226,7 +226,7 @@ class Brain:
         line4_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line4_conv1')  # (12, 17, 17)
         line4_conv2 = cls.conv2d_bn (line4_conv1, 12, (1, 7), 1, 'same', name = f'{prefix}_line4_conv2')  # (12, 17, 17)
         line4_conv3 = cls.conv2d_bn (line4_conv2, 18, (7, 1), 1, 'same', name = f'{prefix}_line4_conv3')  # (18, 17, 17)
-        line4_conv4 = cls.conv2d_bn (line4_conv318, (1, 7), 1, 'same', name = f'{prefix}_line4_conv4')  # (18, 17, 17)
+        line4_conv4 = cls.conv2d_bn (line4_conv3, 18, (1, 7), 1, 'same', name = f'{prefix}_line4_conv4')  # (18, 17, 17)
         line4_output = cls.conv2d_bn (line4_conv4, 24, (7, 1), 1, 'same', name = f'{prefix}_line4')  # (24, 17, 17)
         output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (96, 17, 17)
         return output

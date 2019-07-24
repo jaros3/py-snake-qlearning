@@ -12,20 +12,26 @@ from const import *
 class Board:
     CHANNEL_OBSTACLE = 0
     CHANNEL_APPLE = 1
+    APPLES = 5
 
-    def __init__ (self, apple: Pos, snake: Snake) -> None:
-        self.apple = apple
+    def __init__ (self, apples: List[Pos], snake: Snake) -> None:
+        self.apples = apples
         self.snake = snake
 
     def reset (self) -> None:
-        self.apple = Pos.random ()
+        self.apples = self.random_apples ()
         self.snake = Snake.random ()
+
+    @classmethod
+    def random_apples (cls) -> List[Pos]:
+        return [Pos.random () for i in range (cls.APPLES)]
 
     def draw (self, canvas: Canvas) -> None:
         canvas.delete ('all')
         canvas.create_rectangle (0, 0, WIDTH * SCALE, HEIGHT * SCALE, fill = 'black')
+        for apple in self.apples:
+            apple.draw (canvas, self.snake.head, 'red')
         self.snake.draw (canvas)
-        self.apple.draw (canvas, self.snake.head, 'red')
         self.draw_walls (canvas)
 
     def draw_walls (self, canvas: Canvas) -> None:
@@ -40,16 +46,17 @@ class Board:
     def step (self, action_index: int, real_snake: bool) -> Tuple['Board', int, bool]:
         action = Dir.ALL[action_index]
         next_snake, is_alive = self.snake.move (action)
-        next_board = Board (self.apple, next_snake)
+        next_board = Board (self.apples, next_snake)
         if not is_alive:
             if real_snake:
                 print ('Death!')
             next_board.reset ()
             reward = -1
-        elif self.snake.head == self.apple:
+        elif self.snake.head in self.apples:
             if real_snake:
                 print ('Apple!')
-            next_board.apple = Pos.random ()
+            next_board.apples.remove (self.snake.head)
+            next_board.apples.append (Pos.random ())
             next_snake.grow ()
             reward = 1
         else:
@@ -63,7 +70,8 @@ class Board:
     def observe (self, buffer_slice: np.ndarray) -> None:
         for cell in self.snake.body:
             self.set_pixel (buffer_slice, cell, self.CHANNEL_OBSTACLE)
-        self.set_pixel (buffer_slice, self.apple, self.CHANNEL_APPLE)
+        for apple in self.apples:
+            self.set_pixel (buffer_slice, apple, self.CHANNEL_APPLE)
 
         for x in range (-1, WIDTH + 1):
             self.set_pixel (buffer_slice, Pos (x, -1), self.CHANNEL_OBSTACLE)
@@ -78,6 +86,6 @@ class Board:
             buffer_slice[0, channel, relative.y, relative.x] = 1
 
     def __str__ (self) -> str:
-        return f'apple={self.apple}, snake={self.snake}'
+        return f'apples={self.apples}, snake={self.snake}'
     def __repr__ (self) -> str:
         return str (self)
