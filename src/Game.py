@@ -31,7 +31,10 @@ class Game:
 
     def draw (self, canvas: Canvas) -> None:
         self.board.draw (canvas)
-        self.brain.draw (canvas, self.board.snake.head)
+        if self.displays and self.displays.tracking is not None:
+            self.displays.draw_tracking (canvas, self.brain.current_sight)
+        else:
+            self.brain.draw (canvas, self.board.snake.head)
 
     def set_text (self, text: StringVar) -> None:
         hours = self.seconds // 3600

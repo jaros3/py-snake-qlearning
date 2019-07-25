@@ -5,6 +5,7 @@ from PIL import Image, ImageTk
 import numpy as np
 
 from brain import Brain
+from const import *
 from color import tkinter_rgb
 
 
@@ -15,6 +16,8 @@ class WidthHeight (NamedTuple):
 
 class Display:
     SPACING = 1
+    TRACK_STEPS = 10
+
     def __init__ (self, displays: 'Displays', frame: Frame, output: tf.Tensor):
         self.displays = displays
         self.output = output
@@ -32,7 +35,18 @@ class Display:
         self.canvas.bind ('<Button-1>', self.click)
         self.canvas.pack ()
 
+        self.target = tf.placeholder (tf.float32, shape = self.output.shape)
+        brain = self.displays.brain
+        layer_index = [i
+                       for i, layer in enumerate (brain.estimate_actions.layers)
+                       if layer.output is output][0]
+        loss = tf.losses.mean_squared_error (brain.visual_brain.layers[layer_index].output, self.target)
+        optimizer = tf.train.AdamOptimizer (0.01)
+        self.optimizer_step = optimizer.minimize (loss, var_list = [brain.sight_var])
+        self.reset_optimizer = tf.variables_initializer (optimizer.variables ())
+
         self.tracking: Optional[int] = None
+
         # self.label = Label (frame)
         # image = Image.new ('L', self.size)
         # self.photo_image = ImageTk.PhotoImage (image)
@@ -40,10 +54,11 @@ class Display:
         # self.label.pack ()
 
     def update (self, activation: np.ndarray) -> None:
+        self.update_canvas (activation)
+
         # image = Image.fromarray (self.generate_image (activation), mode = 'L')
         # self.photo_image = ImageTk.PhotoImage (image)
         # self.label.config (image = self.photo_image)
-        self.update_canvas (activation)
 
     def update_canvas (self, activation: np.ndarray) -> None:
         self.canvas.delete ('all')
@@ -93,6 +108,21 @@ class Display:
         self.tracking = i if i < self.channels else None
         self.displays.tracking = self.displays.items.index (self)
 
+    def draw_tracking (self, canvas: Canvas, sight: np.ndarray) -> None:
+        brain = self.displays.brain
+        session = brain.session
+        target = session.run (self.output, feed_dict = { brain.sight_input: sight })
+        session.run (brain.copy_weights + [brain.sight_var.initializer, self.reset_optimizer])
+        for i in range (self.TRACK_STEPS):
+            session.run (self.optimizer_step, feed_dict = { self.target: target })
+        image = session.run (brain.sight_var)
+
+        for y in range (SIGHT_DIAMETER):
+            for x in range (SIGHT_DIAMETER):
+                apple = image[0, CHANNEL_APPLE, y, x]
+                obstacle = image[0, CHANNEL_OBSTACLE, y, x]
+                color = tkinter_rgb (apple, obstacle, 0)
+                canvas.create_rectangle (x * SCALE, y * SCALE, (x + 1) * SCALE, (y + 1) * SCALE, fill = color)
 
 class Displays:
     UPDATE_PERIOD = 10
@@ -119,3 +149,6 @@ class Displays:
             if self.tracking is not None:
                 self.items[self.tracking].tracking = None
             self.tracking = None
+
+    def draw_tracking (self, canvas: Canvas, sight: np.ndarray) -> None:
+        self.items[self.tracking].draw_tracking (canvas, sight)

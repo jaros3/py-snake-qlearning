@@ -8,6 +8,7 @@ import random
 import numpy as np
 from tkinter import Canvas
 
+from const import *
 from color import tkinter_rgb
 from pos import Pos
 from dir import Dir
@@ -34,21 +35,23 @@ class Brain:
         print (tf.__version__)
 
         # (batch, depth, y, x)
-        self.sight, current = self.tiny_brain ()
+        with tf.name_scope ('brain'):
+            self.sight_input = kl.Input (
+                shape = (SIGHT_CHANNELS, SIGHT_DIAMETER, SIGHT_DIAMETER), name = 'sight_input')
+            current = self.tiny_brain (self.sight_input)
         action_values = current
-        self.estimate_actions = tf.keras.Model (inputs = self.sight, outputs = action_values)
+        self.estimate_actions = tf.keras.Model (inputs = self.sight_input, outputs = action_values)
         self.estimate_actions.summary ()
         layer: kl.Layer
         self.observed_layers: List[tf.Tensor] = [layer.output
                                                  for layer in self.estimate_actions.layers
                                                  if isinstance (layer, kl.BatchNormalization)]
-        self.observe_activations = tf.keras.Model (inputs = self.sight, outputs = self.observed_layers)
+        self.observe_activations = tf.keras.Model (inputs = self.sight_input, outputs = self.observed_layers)
 
         self.mask = kl.Input (shape = (self.ACTIONS, 1, 1))
         self.total_future_rewards = kl.Input (shape = (1, 1, 1))
 
         single_action_value = tf.reduce_sum (action_values * self.mask, axis = 1, keepdims = True)
-        self.best_action_value = tf.reduce_max (action_values, axis = 1, keepdims = True)
 
         q_delta = self.total_future_rewards - single_action_value
         q_loss = tf.reduce_mean (tf.square (q_delta) / 2)
@@ -58,9 +61,21 @@ class Brain:
         optimizer = tf.train.AdamOptimizer (learning_rate = self.LEARNING_RATE)
         self.optimize_single_step = optimizer.minimize (total_loss)
 
+        with tf.name_scope ('visual_brain'):
+            self.sight_var: tf.Variable = tf.get_variable (
+                shape = (1, SIGHT_CHANNELS, SIGHT_DIAMETER, SIGHT_DIAMETER), name = 'sight_var',
+                initializer = tf.zeros_initializer)
+            sight_var_input = kl.Input (shape = (SIGHT_CHANNELS, SIGHT_DIAMETER, SIGHT_DIAMETER), tensor = self.sight_var)
+            visual_brain = self.tiny_brain (sight_var_input)
+            self.visual_brain = tf.keras.Model (inputs = sight_var_input, outputs = visual_brain)
+
+        self.copy_weights = [tf.assign (copy, orig) for (copy, orig) in
+                             zip (tf.trainable_variables ('visual_brain'), tf.trainable_variables ('brain'))]
+
         self.session = tf.Session ()
         self.session.run (tf.global_variables_initializer ())
 
+        self.current_sight = None
         self.predicted_action_values = None
         self.last_action_taken = None
         self.remember_predictions ()
@@ -98,7 +113,7 @@ class Brain:
             mask[i, memory.action_index, 0, 0] = 1
 
         self.optimize_single_step.run (feed_dict = {
-            self.sight: prev_sight,
+            self.sight_input: prev_sight,
             self.mask: mask,
             self.total_future_rewards: total_future_rewards,
         })
@@ -137,18 +152,18 @@ class Brain:
     def remember_predictions (self) -> None:
         sight = Board.make_buffer (batch = 1)
         self.game.board.observe (sight)
+        self.current_sight = sight
         self.predicted_action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
         if self.game.displays:
             self.game.displays.update_images (sight)
 
     def display_activations (self, sight: np.ndarray) -> List[np.ndarray]:
         return self.observe_activations.predict (sight)
-        # return self.session.run (self.observed_layers, feed_dict = { self.sight: sight })
+        # return self.session.run (self.observed_layers, feed_dict = { self.sight_input: sight_input })
 
 
-    def tiny_brain (self) -> Tuple[kl.Layer, kl.Layer]:
-        current = kl.Input (shape = (2, 41, 41), name = 'sight')
-        sight = current
+    def tiny_brain (self, input: kl.Layer) -> kl.Layer:
+        current = input
         current = self.conv2d_bn (current, 16, (3, 3), 2, 'valid', name = 'conv1')  # (16, 20, 20)
         current = self.conv2d_bn (current, 24, (3, 3), 1, 'valid', name = 'conv2')  # (24, 18, 18)
         current = kl.AveragePooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (24, 9, 9)
@@ -157,12 +172,12 @@ class Brain:
         current = kl.AveragePooling2D ((3, 3), 1, 'valid', name = 'final_avg_pool') (current)  # (64, 1, 1)
         current = kl.Conv2D (
             self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
-        return sight, current
+        return current
 
     # Based on Inception v4 but smaller in scale
 
-    def inception_brain (self) -> Tuple[kl.Layer, kl.Layer]:
-        sight, current = self.stem ()  # (48, 35, 35)
+    def inception_brain (self, input: kl.Layer) -> kl.Layer:
+        current = self.stem (input)  # (48, 35, 35)
 
         for i in range (1):
             current = self.inception_a (current, i)  # (48, 35, 35)
@@ -176,7 +191,7 @@ class Brain:
         current = kl.AveragePooling2D ((8, 8), 1, 'valid', name = 'final_avg_pool') (current)  # (144, 1, 1)
         current = kl.Conv2D (
             self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
-        return sight, current
+        return current
 
     @classmethod
     def conv2d_bn (cls, current: kl.Layer,
@@ -192,16 +207,14 @@ class Brain:
         current = kl.Activation ('relu', name = f'{name}_relu') (current)
         return current
 
-    @classmethod
-    def stem (cls) -> Tuple[kl.Layer, kl.Layer]:
+    def stem (self, input: kl.Layer) -> kl.Layer:
         """Prepare inputs for further processing. Fit spatial dimension, increase channels."""
-        sight = kl.Input (name = 'sight', shape = (2, 41, 41))  # (2, 41, 41)
-        stem_conv1 = cls.conv2d_bn (sight, 8, (3, 3), 1, 'valid', name = 'stem_conv1')  # (8, 39, 39)
-        stem_conv2 = cls.conv2d_bn (stem_conv1, 16, (3, 3), 1, 'valid', name = 'stem_conv2')  # (16, 37, 37)
+        stem_conv1 = self.conv2d_bn (input, 8, (3, 3), 1, 'valid', name = 'stem_conv1')  # (8, 39, 39)
+        stem_conv2 = self.conv2d_bn (stem_conv1, 16, (3, 3), 1, 'valid', name = 'stem_conv2')  # (16, 37, 37)
         stem_max_pool = kl.MaxPooling2D ((3, 3), 1, 'valid', name = 'stem_max_pool') (stem_conv2)  # (16, 35, 35)
-        stem_conv3 = cls.conv2d_bn (stem_conv2, 32, (3, 3), 1, 'valid', name = 'stem_conv3')  # (32, 35, 35)
+        stem_conv3 = self.conv2d_bn (stem_conv2, 32, (3, 3), 1, 'valid', name = 'stem_conv3')  # (32, 35, 35)
         stem_output = kl.Concatenate (axis = 1) ([stem_max_pool, stem_conv3])  # (48, 35, 35)
-        return sight, stem_output
+        return stem_output
 
     @classmethod
     def inception_a (cls, input: kl.Layer, index: int) -> kl.Layer:

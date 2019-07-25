@@ -10,8 +10,6 @@ from const import *
 
 
 class Board:
-    CHANNEL_OBSTACLE = 0
-    CHANNEL_APPLE = 1
     APPLES = 5
 
     def __init__ (self, apples: List[Pos], snake: Snake) -> None:
@@ -68,16 +66,16 @@ class Board:
 
     def observe (self, buffer_slice: np.ndarray) -> None:
         for cell in self.snake.body:
-            self.set_pixel (buffer_slice, cell, self.CHANNEL_OBSTACLE)
+            self.set_pixel (buffer_slice, cell, CHANNEL_OBSTACLE)
         for apple in self.apples:
-            self.set_pixel (buffer_slice, apple, self.CHANNEL_APPLE)
+            self.set_pixel (buffer_slice, apple, CHANNEL_APPLE)
 
         for x in range (-1, WIDTH + 1):
-            self.set_pixel (buffer_slice, Pos (x, -1), self.CHANNEL_OBSTACLE)
-            self.set_pixel (buffer_slice, Pos (x, HEIGHT), self.CHANNEL_OBSTACLE)
+            self.set_pixel (buffer_slice, Pos (x, -1), CHANNEL_OBSTACLE)
+            self.set_pixel (buffer_slice, Pos (x, HEIGHT), CHANNEL_OBSTACLE)
         for y in range (-1, HEIGHT + 1):
-            self.set_pixel (buffer_slice, Pos (-1, y), self.CHANNEL_OBSTACLE)
-            self.set_pixel (buffer_slice, Pos (WIDTH, y), self.CHANNEL_OBSTACLE)
+            self.set_pixel (buffer_slice, Pos (-1, y), CHANNEL_OBSTACLE)
+            self.set_pixel (buffer_slice, Pos (WIDTH, y), CHANNEL_OBSTACLE)
 
     def set_pixel (self, buffer_slice: np.ndarray, cell: Pos, channel: int) -> None:
         relative = cell - self.snake.head + Pos (SIGHT_RADIUS, SIGHT_RADIUS)
