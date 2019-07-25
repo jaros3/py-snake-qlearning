@@ -28,6 +28,13 @@ with game.brain.session.as_default ():
     game.displays = Displays (display_frame, game.brain)
 
 
+    def key_press (e) -> None:
+        if e.char == 'd':
+            game.displays.enabled = not game.displays.enabled
+
+    window.bind ('<KeyPress>', key_press)
+
+
     def game_body () -> None:
         game.step_and_learn ()
         game.draw (canvas)
@@ -35,6 +42,7 @@ with game.brain.session.as_default ():
         window.after (10, game_body)
 
     window.after (10, game_body)
+
 
     def second_elapsed ():
         game.seconds += 1

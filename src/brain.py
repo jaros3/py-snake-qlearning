@@ -8,6 +8,7 @@ import random
 import numpy as np
 from tkinter import Canvas
 
+from color import tkinter_rgb
 from pos import Pos
 from dir import Dir
 from board import Board
@@ -84,7 +85,6 @@ class Brain:
 
     def learn (self, memories: Memories) -> None:
         if len (memories.items) < self.BATCH + self.FUTURE_STEPS:
-            self.remember_predictions ()
             return
         batch = random.sample (memories.items[:-self.FUTURE_STEPS], self.BATCH)
 
@@ -102,7 +102,6 @@ class Brain:
             self.mask: mask,
             self.total_future_rewards: total_future_rewards,
         })
-        self.remember_predictions ()
 
     def estimate_future (self, batch: List[Memory]) -> np.ndarray:
         tracks: List[List[Memory]] = [[memory] for memory in batch]
@@ -286,12 +285,5 @@ class Brain:
     def draw (self, canvas: Canvas, head: Pos) -> None:
         for i, dir in enumerate (Dir.ALL):
             value = self.predicted_action_values[i]
-            color = self.rgb (-2 * value - 1, 2 * value + 1, 1 - 2 * abs (value + 0.5))
+            color = tkinter_rgb (-2 * value - 1, 2 * value + 1, 1 - 2 * abs (value + 0.5))
             (head + dir.offset).draw (canvas, head, color)
-
-    @classmethod
-    def rgb (cls, r: float, g: float, b: float) -> str:
-        r = max (0, min (255, int (round (r * 255))))
-        g = max (0, min (255, int (round (g * 255))))
-        b = max (0, min (255, int (round (b * 255))))
-        return f'#{r:02x}{g:02x}{b:02x}'

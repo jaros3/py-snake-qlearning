@@ -1,13 +1,11 @@
 import tensorflow as tf
-from tensorflow.layers import Layer
-from tensorflow import Tensor
-from tkinter import Frame, Label, PhotoImage
+from tkinter import Canvas, Frame, Label
 from typing import List, NamedTuple
 from PIL import Image, ImageTk
 import numpy as np
-from matplotlib import pyplot as plt
 
 from brain import Brain
+from color import tkinter_rgb
 
 
 class WidthHeight (NamedTuple):
@@ -29,16 +27,38 @@ class Display:
         self.height = self.cell_height * ((self.channels + self.per_row - 1) // self.per_row)
         self.size = WidthHeight (self.width, self.height)
 
-        self.label = Label (frame)
-        image = Image.new ('L', self.size)
-        self.photo_image = ImageTk.PhotoImage (image)
-        self.label.config (image = self.photo_image)
-        self.label.pack ()
+        self.canvas = Canvas (frame, width = self.width, height = self.height)
+        self.canvas.pack ()
+        # self.label = Label (frame)
+        # image = Image.new ('L', self.size)
+        # self.photo_image = ImageTk.PhotoImage (image)
+        # self.label.config (image = self.photo_image)
+        # self.label.pack ()
 
     def update (self, activation: np.ndarray) -> None:
-        image = Image.fromarray (self.generate_image (activation), mode = 'L')
-        self.photo_image = ImageTk.PhotoImage (image)
-        self.label.config (image = self.photo_image)
+        # image = Image.fromarray (self.generate_image (activation), mode = 'L')
+        # self.photo_image = ImageTk.PhotoImage (image)
+        # self.label.config (image = self.photo_image)
+        self.update_canvas (activation)
+
+    def update_canvas (self, activation: np.ndarray) -> None:
+        self.canvas.delete ('all')
+
+        row, column = 0, 0
+        for channel in range (self.channels):
+            base_y = row * self.cell_height
+            base_x = column * self.cell_width
+            for layer_y in range (self.output_height):
+                for layer_x in range (self.output_width):
+                    x = base_x + layer_x * self.scale
+                    y = base_y + layer_y * self.scale
+                    grey = activation[0, channel, layer_y, layer_x] / 2 + 0.5
+                    color = tkinter_rgb (grey, grey, grey)
+                    self.canvas.create_rectangle (x, y, x + self.scale + 1, y + self.scale + 1, fill = color, outline = '')
+            column += 1
+            if column >= self.per_row:
+                column = 0
+                row += 1
 
     def generate_image (self, activation: np.ndarray) -> np.ndarray:
         result = np.zeros ((self.height, self.width))  # -1..1
@@ -64,12 +84,17 @@ class Display:
 
 
 class Displays:
+    UPDATE_PERIOD = 5
+
     def __init__ (self, frame: Frame, brain: Brain):
         self.frame = frame
         self.brain = brain
         self.items = [Display (frame, layer) for layer in brain.observed_layers]
+        self.enabled = True
 
     def update_images (self, sight: np.ndarray) -> None:
+        if not self.enabled or self.brain.game.current_step % self.UPDATE_PERIOD != 0:
+            return
         activations: List[np.ndarray] = self.brain.display_activations (sight)
         display: Display
         for i, display in enumerate (self.items):

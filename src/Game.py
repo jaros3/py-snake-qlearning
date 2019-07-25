@@ -55,6 +55,7 @@ class Game:
         if self.current_step % self.LEARN_PERIOD == 0:
             self.brain.learn (self.memories)
         self.board = next_board
+        self.brain.remember_predictions ()
 
     def step (self, action_index: int) -> Tuple[int, bool, Board]:
         self.age += 1

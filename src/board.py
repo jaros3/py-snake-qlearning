@@ -28,7 +28,6 @@ class Board:
 
     def draw (self, canvas: Canvas) -> None:
         canvas.delete ('all')
-        canvas.create_rectangle (0, 0, WIDTH * SCALE, HEIGHT * SCALE, fill = 'black')
         for apple in self.apples:
             apple.draw (canvas, self.snake.head, 'red')
         self.snake.draw (canvas)
