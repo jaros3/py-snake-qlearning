@@ -16,66 +16,61 @@ class WidthHeight (NamedTuple):
 
 
 class Display:
-    SCALE = 2
     SPACING = 1
-    PER_ROW = 4
+    def __init__ (self, frame: Frame, output: tf.Tensor):
+        self.output = output
 
-    def __init__ (self, frame: Frame, brain: Brain):
-        self.frame = frame
-        self.brain = brain
-        self.layers = brain.observed_layers
-        self.labels = [self.make_label (layer) for layer in self.layers]
+        batch, self.channels, self.output_height, self.output_width = self.output.shape
+        self.scale = 40 // self.output_width
+        self.cell_width = self.output_width * self.scale + self.SPACING
+        self.cell_height = self.output_height * self.scale + self.SPACING
+        self.per_row = 164 // self.cell_width
+        self.width = self.cell_width * self.per_row - 1
+        self.height = self.cell_height * ((self.channels + self.per_row - 1) // self.per_row)
+        self.size = WidthHeight (self.width, self.height)
 
-    def make_label (self, layer_output: tf.Tensor) -> Label:
-        label = Label (self.frame)
+        self.label = Label (frame)
+        image = Image.new ('L', self.size)
+        self.photo_image = ImageTk.PhotoImage (image)
+        self.label.config (image = self.photo_image)
+        self.label.pack ()
 
-        width_height = self.image_size (layer_output)
-        image = Image.new ('L', width_height)
-        photo_image = ImageTk.PhotoImage (image)
-        label.config (image = photo_image)
-
-        label.pack ()
-        return label
-
-    def update_images (self, sight: np.ndarray) -> None:
-        activations: List[np.ndarray] = self.brain.display_activations (sight)
-        for i, label in enumerate (self.labels):
-            image = Image.fromarray (self.generate_image (activations[i]), mode = 'L')
-            photo_image = ImageTk.PhotoImage (image)
-            label.config (image = photo_image)
-            label.image = photo_image
-
-    def image_size (self, layer_output: tf.Tensor) -> WidthHeight:
-        batch, channels, layer_height, layer_width = layer_output.shape
-        single_width = layer_width * self.SCALE + self.SPACING
-        single_height = layer_height * self.SCALE + self.SPACING
-        width = single_width * self.PER_ROW - 1
-        height = single_height // self.PER_ROW
-        return WidthHeight (width, height)
+    def update (self, activation: np.ndarray) -> None:
+        image = Image.fromarray (self.generate_image (activation), mode = 'L')
+        self.photo_image = ImageTk.PhotoImage (image)
+        self.label.config (image = self.photo_image)
 
     def generate_image (self, activation: np.ndarray) -> np.ndarray:
-        batch, channels, layer_height, layer_width = activation.shape
-        single_width = layer_width * self.SCALE + self.SPACING
-        single_height = layer_height * self.SCALE + self.SPACING
-        width = single_width * self.PER_ROW - self.SPACING
-        height = single_height * (channels // self.PER_ROW)
-        result = np.zeros ((height, width))  # -1..1
+        result = np.zeros ((self.height, self.width))  # -1..1
 
         row, column = 0, 0
-        for channel in range (channels):
-            base_y = row * single_height
-            base_x = column * single_width
-            for layer_y in range (layer_height):
-                for layer_x in range (layer_width):
-                    for offset_y in range (self.SCALE):
-                        for offset_x in range (self.SCALE):
-                            x = base_x + layer_x * self.SCALE + offset_x
-                            y = base_y + layer_y * self.SCALE + offset_y
+        for channel in range (self.channels):
+            base_y = row * self.cell_height
+            base_x = column * self.cell_width
+            for layer_y in range (self.output_height):
+                for layer_x in range (self.output_width):
+                    for offset_y in range (self.scale):
+                        for offset_x in range (self.scale):
+                            x = base_x + layer_x * self.scale + offset_x
+                            y = base_y + layer_y * self.scale + offset_y
                             result[y, x] = activation[0, channel, layer_y, layer_x]
 
             column += 1
-            if column >= self.PER_ROW:
+            if column >= self.per_row:
                 column = 0
                 row += 1
         as_bytes = np.uint8 ((result / 2 + 0.5).clip (0, 1) * 255)
         return as_bytes
+
+
+class Displays:
+    def __init__ (self, frame: Frame, brain: Brain):
+        self.frame = frame
+        self.brain = brain
+        self.items = [Display (frame, layer) for layer in brain.observed_layers]
+
+    def update_images (self, sight: np.ndarray) -> None:
+        activations: List[np.ndarray] = self.brain.display_activations (sight)
+        display: Display
+        for i, display in enumerate (self.items):
+            display.update (activations[i])

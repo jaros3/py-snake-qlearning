@@ -139,8 +139,8 @@ class Brain:
         sight = Board.make_buffer (batch = 1)
         self.game.board.observe (sight)
         self.predicted_action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
-        if self.game.display:
-            self.game.display.update_images (sight)
+        if self.game.displays:
+            self.game.displays.update_images (sight)
 
     def display_activations (self, sight: np.ndarray) -> List[np.ndarray]:
         return self.observe_activations.predict (sight)

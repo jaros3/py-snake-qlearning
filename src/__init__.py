@@ -2,7 +2,7 @@ from tkinter import *
 
 from const import *
 from dir import Dir
-from display import Display
+from display import Displays
 from game import Game
 
 
@@ -25,10 +25,10 @@ with game.brain.session.as_default ():
 
     display_frame = Frame (window, bg = 'black')
     display_frame.grid (row = 0, column = 1, rowspan = 2)
-    game.display = Display (display_frame, game.brain)
+    game.displays = Displays (display_frame, game.brain)
 
 
-    def game_body ():
+    def game_body () -> None:
         game.step_and_learn ()
         game.draw (canvas)
         game.set_text (label_text)
