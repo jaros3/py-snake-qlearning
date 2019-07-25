@@ -45,7 +45,7 @@ class Brain:
         layer: kl.Layer
         self.observed_layers: List[tf.Tensor] = [layer.output
                                                  for layer in self.estimate_actions.layers
-                                                 if isinstance (layer, kl.BatchNormalization)]
+                                                 if isinstance (layer, kl.BatchNormalization)] + [current]
         self.observe_activations = tf.keras.Model (inputs = self.sight_input, outputs = self.observed_layers)
 
         self.mask = kl.Input (shape = (self.ACTIONS, 1, 1))
@@ -64,7 +64,11 @@ class Brain:
         with tf.name_scope ('visual_brain'):
             self.sight_var: tf.Variable = tf.get_variable (
                 shape = (1, SIGHT_CHANNELS, SIGHT_DIAMETER, SIGHT_DIAMETER), name = 'sight_var',
-                initializer = tf.zeros_initializer)
+                initializer = tf.random_normal_initializer (stddev = 0.01))
+            self.sight_value = tf.placeholder (tf.float32, shape = (1, SIGHT_CHANNELS, SIGHT_DIAMETER, SIGHT_DIAMETER))
+            sight_noise = tf.random_normal (shape = (1, SIGHT_CHANNELS, SIGHT_DIAMETER, SIGHT_DIAMETER), stddev = 0.01)
+            self.set_sight_var = tf.assign (self.sight_var, self.sight_value + sight_noise)
+
             sight_var_input = kl.Input (shape = (SIGHT_CHANNELS, SIGHT_DIAMETER, SIGHT_DIAMETER), tensor = self.sight_var)
             visual_brain = self.tiny_brain (sight_var_input)
             self.visual_brain = tf.keras.Model (inputs = sight_var_input, outputs = visual_brain)

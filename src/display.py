@@ -41,7 +41,7 @@ class Display:
                        for i, layer in enumerate (brain.estimate_actions.layers)
                        if layer.output is output][0]
         loss = tf.losses.mean_squared_error (brain.visual_brain.layers[layer_index].output, self.target)
-        optimizer = tf.train.AdamOptimizer (0.01)
+        optimizer = tf.train.AdamOptimizer (0.1)
         self.optimizer_step = optimizer.minimize (loss, var_list = [brain.sight_var])
         self.reset_optimizer = tf.variables_initializer (optimizer.variables ())
 
@@ -111,8 +111,12 @@ class Display:
     def draw_tracking (self, canvas: Canvas, sight: np.ndarray) -> None:
         brain = self.displays.brain
         session = brain.session
-        target = session.run (self.output, feed_dict = { brain.sight_input: sight })
-        session.run (brain.copy_weights + [brain.sight_var.initializer, self.reset_optimizer])
+        target = session.run (self.output, feed_dict = { brain.sight_input: sight })  # (1, channels, height, width)
+        target[0, 0:self.channels, :, :] = 0
+        target[0, self.channels + 1:, :, :] = 0
+        session.run (brain.copy_weights + [self.reset_optimizer])
+        session.run (brain.set_sight_var, feed_dict = { brain.sight_value: sight })
+
         for i in range (self.TRACK_STEPS):
             session.run (self.optimizer_step, feed_dict = { self.target: target })
         image = session.run (brain.sight_var)
