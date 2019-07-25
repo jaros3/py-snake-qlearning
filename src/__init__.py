@@ -20,19 +20,13 @@ with game.brain.session.as_default ():
 
     label_text = StringVar (value = 'Attempt:\nScore:')
     game.set_text (label_text)
-    label = Label (window, bg = 'grey', fg = 'black', textvariable = label_text)
+    label = Label (window, fg = 'black', textvariable = label_text)
     label.grid (row = 1, column = 0)
 
-    display_frame = Frame (window, bg = 'black')
+    display_frame = Frame (window)
     display_frame.grid (row = 0, column = 1, rowspan = 2)
     game.displays = Displays (display_frame, game.brain)
-
-
-    def key_press (e) -> None:
-        if e.char == 'd':
-            game.displays.enabled = not game.displays.enabled
-
-    window.bind ('<KeyPress>', key_press)
+    window.bind ('<KeyPress>', game.displays.key_press)
 
 
     def game_body () -> None:

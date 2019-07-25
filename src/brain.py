@@ -41,7 +41,7 @@ class Brain:
         layer: kl.Layer
         self.observed_layers: List[tf.Tensor] = [layer.output
                                                  for layer in self.estimate_actions.layers
-                                                 if isinstance (layer, kl.BatchNormalization)] + [current]
+                                                 if isinstance (layer, kl.BatchNormalization)]
         self.observe_activations = tf.keras.Model (inputs = self.sight, outputs = self.observed_layers)
 
         self.mask = kl.Input (shape = (self.ACTIONS, 1, 1))
@@ -52,7 +52,7 @@ class Brain:
 
         q_delta = self.total_future_rewards - single_action_value
         q_loss = tf.reduce_mean (tf.square (q_delta) / 2)
-        regularization_loss = tf.add_n (self.estimate_actions.losses)
+        # regularization_loss = tf.add_n (self.estimate_actions.losses)
         total_loss = q_loss # + regularization_loss
 
         optimizer = tf.train.AdamOptimizer (learning_rate = self.LEARNING_RATE)
@@ -150,10 +150,11 @@ class Brain:
         current = kl.Input (shape = (2, 41, 41), name = 'sight')
         sight = current
         current = self.conv2d_bn (current, 16, (3, 3), 2, 'valid', name = 'conv1')  # (16, 20, 20)
-        current = self.conv2d_bn (current, 20, (3, 3), 1, 'valid', name = 'conv2')  # (20, 18, 18)
-        current = kl.AveragePooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (20, 9, 9)
-        current = self.conv2d_bn (current, 24, (3, 3), 1, 'valid', name = 'conv3')  # (24, 7, 7)
-        current = kl.AveragePooling2D ((7, 7), 1, 'valid', name = 'final_avg_pool') (current)  # (24, 1, 1)
+        current = self.conv2d_bn (current, 24, (3, 3), 1, 'valid', name = 'conv2')  # (24, 18, 18)
+        current = kl.AveragePooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (24, 9, 9)
+        current = self.conv2d_bn (current, 32, (3, 3), 1, 'valid', name = 'conv3')  # (32, 7, 7)
+        current = self.conv2d_bn (current, 64, (3, 3), 2, 'valid', name = 'conv4')  # (64, 3, 3)
+        current = kl.AveragePooling2D ((3, 3), 1, 'valid', name = 'final_avg_pool') (current)  # (64, 1, 1)
         current = kl.Conv2D (
             self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
         return sight, current
@@ -182,11 +183,12 @@ class Brain:
                    filters: int, filter_size: Tuple[int, int], stride: int, padding: str, name: str) -> kl.Layer:
         current = kl.Conv2D (
             filters, filter_size, stride, padding, name = name,
-            kernel_regularizer = kreg.l2 (cls.REGULARIZER), bias_regularizer = kreg.l2 (cls.REGULARIZER)
+            # kernel_regularizer = kreg.l2 (cls.REGULARIZER), bias_regularizer = kreg.l2 (cls.REGULARIZER)
         ) (current)
         current = kl.BatchNormalization (
             axis = 1, name = f'{name}_bn', trainable = True,
-            beta_regularizer = kreg.l2 (cls.REGULARIZER), gamma_regularizer = kreg.l2 (cls.REGULARIZER)) (current)
+            # beta_regularizer = kreg.l2 (cls.REGULARIZER), gamma_regularizer = kreg.l2 (cls.REGULARIZER)
+        ) (current)
         current = kl.Activation ('relu', name = f'{name}_relu') (current)
         return current
 
