@@ -8,6 +8,7 @@ from snake import Snake
 from board import Board
 from brain import Brain
 from memories import Memory, Memories
+from display import Display
 
 
 class Game:
@@ -25,6 +26,7 @@ class Game:
         self.max_apples = 0
         self.board = Board (Board.random_apples (), Snake.random ())
         self.memories = Memories ()
+        self.display: Display = None
         self.brain = Brain (self)
 
     def draw (self, canvas: Canvas) -> None:

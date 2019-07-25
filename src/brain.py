@@ -1,8 +1,6 @@
 import tensorflow as tf
-import tensorflow.keras as keras
-import tensorflow.keras.layers as layers
-from tensorflow.keras.layers import *
-from tensorflow.keras.regularizers import *
+from tensorflow.keras import layers as kl
+from tensorflow.keras import regularizers as kreg
 import typing
 from typing import Tuple
 from sizes import *
@@ -32,14 +30,21 @@ class Brain:
     def __init__ (self, game: 'Game') -> None:
         self.game: 'Game' = game
 
-        # (batch, depth, y, x)
-        self.sight, current = self.inception_brain ()
-        action_values = current
-        self.estimate_actions = keras.Model (inputs = self.sight, outputs = action_values)
-        self.estimate_actions.summary ()
+        print (tf.__version__)
 
-        self.mask = Input (shape = (self.ACTIONS, 1, 1))
-        self.total_future_rewards = Input (shape = (1, 1, 1))
+        # (batch, depth, y, x)
+        self.sight, current = self.tiny_brain ()
+        action_values = current
+        self.estimate_actions = tf.keras.Model (inputs = self.sight, outputs = action_values)
+        self.estimate_actions.summary ()
+        layer: kl.Layer
+        self.observed_layers: List[tf.Tensor] = [layer.output
+                                                 for layer in self.estimate_actions.layers
+                                                 if isinstance (layer, kl.BatchNormalization)] + [current]
+        self.observe_activations = tf.keras.Model (inputs = self.sight, outputs = self.observed_layers)
+
+        self.mask = kl.Input (shape = (self.ACTIONS, 1, 1))
+        self.total_future_rewards = kl.Input (shape = (1, 1, 1))
 
         single_action_value = tf.reduce_sum (action_values * self.mask, axis = 1, keepdims = True)
         self.best_action_value = tf.reduce_max (action_values, axis = 1, keepdims = True)
@@ -79,6 +84,7 @@ class Brain:
 
     def learn (self, memories: Memories) -> None:
         if len (memories.items) < self.BATCH + self.FUTURE_STEPS:
+            self.remember_predictions ()
             return
         batch = random.sample (memories.items[:-self.FUTURE_STEPS], self.BATCH)
 
@@ -133,23 +139,29 @@ class Brain:
         sight = Board.make_buffer (batch = 1)
         self.game.board.observe (sight)
         self.predicted_action_values: np.ndarray = self.estimate_actions.predict (sight).flatten ()
+        if self.game.display:
+            self.game.display.update_images (sight)
+
+    def display_activations (self, sight: np.ndarray) -> List[np.ndarray]:
+        return self.observe_activations.predict (sight)
+        # return self.session.run (self.observed_layers, feed_dict = { self.sight: sight })
 
 
-    def tiny_brain (self) -> Tuple[Layer, Layer]:
-        current = Input (shape = (2, 41, 41), name = 'sight')
+    def tiny_brain (self) -> Tuple[kl.Layer, kl.Layer]:
+        current = kl.Input (shape = (2, 41, 41), name = 'sight')
         sight = current
         current = self.conv2d_bn (current, 16, (3, 3), 2, 'valid', name = 'conv1')  # (16, 20, 20)
         current = self.conv2d_bn (current, 20, (3, 3), 1, 'valid', name = 'conv2')  # (20, 18, 18)
-        current = AveragePooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (20, 9, 9)
+        current = kl.AveragePooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (20, 9, 9)
         current = self.conv2d_bn (current, 24, (3, 3), 1, 'valid', name = 'conv3')  # (24, 7, 7)
-        current = AveragePooling2D ((7, 7), 1, 'valid', name = 'final_avg_pool') (current)  # (24, 1, 1)
-        current = Conv2D (
+        current = kl.AveragePooling2D ((7, 7), 1, 'valid', name = 'final_avg_pool') (current)  # (24, 1, 1)
+        current = kl.Conv2D (
             self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
         return sight, current
 
     # Based on Inception v4 but smaller in scale
 
-    def inception_brain (self) -> Tuple[Layer, Layer]:
+    def inception_brain (self) -> Tuple[kl.Layer, kl.Layer]:
         sight, current = self.stem ()  # (48, 35, 35)
 
         for i in range (1):
@@ -161,63 +173,64 @@ class Brain:
         for i in range (1):
             current = self.inception_c (current, i)  # (144, 8, 8)
 
-        current = AveragePooling2D ((8, 8), 1, 'valid', name = 'final_avg_pool') (current)  # (144, 1, 1)
-        current = Conv2D (
+        current = kl.AveragePooling2D ((8, 8), 1, 'valid', name = 'final_avg_pool') (current)  # (144, 1, 1)
+        current = kl.Conv2D (
             self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
         return sight, current
 
     @classmethod
-    def conv2d_bn (cls, current: Layer, filters: int, filter_size: Tuple[int, int], stride: int, padding: str, name: str) -> Layer:
-        current = Conv2D (
+    def conv2d_bn (cls, current: kl.Layer,
+                   filters: int, filter_size: Tuple[int, int], stride: int, padding: str, name: str) -> kl.Layer:
+        current = kl.Conv2D (
             filters, filter_size, stride, padding, name = name,
-            kernel_regularizer = l2 (cls.REGULARIZER), bias_regularizer = l2 (cls.REGULARIZER)
+            kernel_regularizer = kreg.l2 (cls.REGULARIZER), bias_regularizer = kreg.l2 (cls.REGULARIZER)
         ) (current)
-        current = BatchNormalization (
+        current = kl.BatchNormalization (
             axis = 1, name = f'{name}_bn', trainable = True,
-            beta_regularizer = l2 (cls.REGULARIZER), gamma_regularizer = l2 (cls.REGULARIZER)) (current)
-        current = Activation ('relu', name = f'{name}_relu') (current)
+            beta_regularizer = kreg.l2 (cls.REGULARIZER), gamma_regularizer = kreg.l2 (cls.REGULARIZER)) (current)
+        current = kl.Activation ('relu', name = f'{name}_relu') (current)
         return current
 
     @classmethod
-    def stem (cls) -> Tuple[Layer, Layer]:
+    def stem (cls) -> Tuple[kl.Layer, kl.Layer]:
         """Prepare inputs for further processing. Fit spatial dimension, increase channels."""
-        sight = layers.Input (name = 'sight', shape = (2, 41, 41))  # (2, 41, 41)
+        sight = kl.Input (name = 'sight', shape = (2, 41, 41))  # (2, 41, 41)
         stem_conv1 = cls.conv2d_bn (sight, 8, (3, 3), 1, 'valid', name = 'stem_conv1')  # (8, 39, 39)
         stem_conv2 = cls.conv2d_bn (stem_conv1, 16, (3, 3), 1, 'valid', name = 'stem_conv2')  # (16, 37, 37)
-        stem_max_pool = MaxPooling2D ((3, 3), 1, 'valid', name = 'stem_max_pool') (stem_conv2)  # (16, 35, 35)
+        stem_max_pool = kl.MaxPooling2D ((3, 3), 1, 'valid', name = 'stem_max_pool') (stem_conv2)  # (16, 35, 35)
         stem_conv3 = cls.conv2d_bn (stem_conv2, 32, (3, 3), 1, 'valid', name = 'stem_conv3')  # (32, 35, 35)
-        stem_output = Concatenate (axis = 1) ([stem_max_pool, stem_conv3])  # (48, 35, 35)
+        stem_output = kl.Concatenate (axis = 1) ([stem_max_pool, stem_conv3])  # (48, 35, 35)
         return sight, stem_output
 
     @classmethod
-    def inception_a (cls, input: Layer, index: int) -> Layer:
+    def inception_a (cls, input: kl.Layer, index: int) -> kl.Layer:
         """Process at as close level as possible."""
         prefix = f'inception_a_{index}'
-        line1_avg_pool = AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (48, 35, 35)
+        line1_avg_pool = kl.AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (48, 35, 35)
         line1_output = cls.conv2d_bn (line1_avg_pool, 12, (1, 1), 1, 'same', name = f'{prefix}_line1')  # (12, 35, 35)
         line2_output = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line2')  # (12, 35, 35)
         line3_conv1 = cls.conv2d_bn (input, 8, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (8, 35, 35)
         line3_output = cls.conv2d_bn (line3_conv1, 12, (3, 3), 1, 'same', name = f'{prefix}_line3')  # (12, 35, 35)
         line4_output = cls.conv2d_bn (line3_output, 12, (3, 3), 1, 'same', name = f'{prefix}_line4')  # (12, 35, 35)
-        output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (48, 35, 35)
+        output = kl.Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (48, 35, 35)
         return output
 
     @classmethod
-    def reduce_a_to_b (cls, input: Layer) -> Layer:
+    def reduce_a_to_b (cls, input: kl.Layer) -> kl.Layer:
         prefix = 'reduce_a_to_b'
-        line1_output = MaxPooling2D ((3, 3), 2, 'valid', name = f'{prefix}_max_pool') (input)  # (48, 17, 17)
+        line1_output = kl.MaxPooling2D ((3, 3), 2, 'valid', name = f'{prefix}_max_pool') (input)  # (48, 17, 17)
         line2_putput = cls.conv2d_bn (input, 24, (3, 3), 2, 'valid', name = f'{prefix}_line2')  # (24, 17, 17)
         line3_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (12, 35, 35)
         line3_conv2 = cls.conv2d_bn (line3_conv1, 18, (3, 3), 1, 'same', name = f'{prefix}_line3_conv2')  # (18, 35, 35)
         line3_output = cls.conv2d_bn (line3_conv2, 24, (3, 3), 2, 'valid', name = f'{prefix}_line3_conv3')  # (24, 17, 17)
-        output = Concatenate (axis = 1) ([line1_output, line2_putput, line3_output])  # (96, 17, 17)
+        output = kl.Concatenate (axis = 1) ([line1_output, line2_putput, line3_output])  # (96, 17, 17)
         return output
 
     @classmethod
-    def inception_b (cls, input: Layer, index: int) -> Layer:
+    def inception_b (cls, input: kl.Layer, index: int) -> kl.Layer:
         """Process at middle level."""
         prefix = f'inception_b_{index}'
-        line1_avg_pool = AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (96, 17, 17)
+        line1_avg_pool = kl.AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (96, 17, 17)
         line1_output = cls.conv2d_bn (line1_avg_pool, 24, (1, 1), 1, 'same', name = f'{prefix}_line1')  # (24, 17, 17)
         line2_output = cls.conv2d_bn (input, 24, (1, 1), 1, 'same', name = f'{prefix}_line2')  # (24, 17, 17)
         line3_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (12, 17, 17)
@@ -228,27 +241,27 @@ class Brain:
         line4_conv3 = cls.conv2d_bn (line4_conv2, 18, (7, 1), 1, 'same', name = f'{prefix}_line4_conv3')  # (18, 17, 17)
         line4_conv4 = cls.conv2d_bn (line4_conv3, 18, (1, 7), 1, 'same', name = f'{prefix}_line4_conv4')  # (18, 17, 17)
         line4_output = cls.conv2d_bn (line4_conv4, 24, (7, 1), 1, 'same', name = f'{prefix}_line4')  # (24, 17, 17)
-        output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (96, 17, 17)
+        output = kl.Concatenate (axis = 1) ([line1_output, line2_output, line3_output, line4_output])  # (96, 17, 17)
         return output
 
     @classmethod
-    def reduce_b_to_c (cls, input: Layer) -> Layer:
+    def reduce_b_to_c (cls, input: kl.Layer) -> kl.Layer:
         prefix = 'reduce_b_to_c'
-        line1_output = MaxPooling2D ((3, 3), 2, 'valid', name = f'{prefix}_max_pool') (input)  # (96, 8, 8)
+        line1_output = kl.MaxPooling2D ((3, 3), 2, 'valid', name = f'{prefix}_max_pool') (input)  # (96, 8, 8)
         line2_conv1 = cls.conv2d_bn (input, 12, (1, 1), 1, 'same', name = f'{prefix}_line2_conv1')  # (12, 17, 17)
         line2_output = cls.conv2d_bn (line2_conv1, 12, (3, 3), 2, 'valid', name = f'{prefix}_line2')  # (12, 8, 8)
         line3_conv1 = cls.conv2d_bn (input, 24, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (24, 17, 17)
         line3_conv2 = cls.conv2d_bn (line3_conv1, 24, (1, 7), 1, 'same', name = f'{prefix}_line3_conv2')  # (24, 17, 17)
         line3_conv3 = cls.conv2d_bn (line3_conv2, 36, (7, 1), 1, 'same', name = f'{prefix}_line3_conv3')  # (36, 17, 17)
         line3_output = cls.conv2d_bn (line3_conv3, 36, (3, 3), 2, 'valid', name = f'{prefix}_line3')  # (36, 8, 8)
-        output = Concatenate (axis = 1) ([line1_output, line2_output, line3_output])  # (144, 8, 8)
+        output = kl.Concatenate (axis = 1) ([line1_output, line2_output, line3_output])  # (144, 8, 8)
         return output
 
     @classmethod
-    def inception_c (cls, input: Layer, index: int) -> Layer:
+    def inception_c (cls, input: kl.Layer, index: int) -> kl.Layer:
         """Process at far away look."""
         prefix = f'inception_c_{index}'
-        line1_avg_pool = AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (144, 8, 8)
+        line1_avg_pool = kl.AveragePooling2D ((3, 3), 1, 'same', name = f'{prefix}_line1_avg_pool') (input)  # (144, 8, 8)
         line1_output = cls.conv2d_bn (line1_avg_pool, 24, (1, 1), 1, 'same', name = f'{prefix}_line1')  # (24, 8, 8)
         line2_output = cls.conv2d_bn (input, 24, (1, 1), 1, 'same', name = f'{prefix}_line2')  # (24, 8, 8)
         line3_conv1 = cls.conv2d_bn (input, 36, (1, 1), 1, 'same', name = f'{prefix}_line3_conv1')  # (36, 8, 8)
@@ -259,7 +272,7 @@ class Brain:
         line4_conv3 = cls.conv2d_bn (line4_conv2, 60, (3, 1), 1, 'same', name = f'{prefix}_line4_conv3')  # (60, 8, 8)
         line4_fork_a = cls.conv2d_bn (line4_conv3, 24, (1, 3), 1, 'same', name = f'{prefix}_line4_fork_a')  # (24, 8, 8)
         line4_fork_b = cls.conv2d_bn (line4_conv3, 24, (3, 1), 1, 'same', name = f'{prefix}_line4_fork_b')  # (24, 8, 8)
-        output = Concatenate (axis = 1) ([
+        output = kl.Concatenate (axis = 1) ([
             line1_output, line2_output, line3_fork_a, line3_fork_b, line4_fork_a, line4_fork_b])  # (144, 8, 8)
         return output
 
