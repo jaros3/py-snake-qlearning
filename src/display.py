@@ -196,8 +196,8 @@ class OutputDisplay (Display):
 
         for y in range (SIGHT_DIAMETER):
             for x in range (SIGHT_DIAMETER):
-                apple = image[0, CHANNEL_APPLE, y, x]
-                obstacle = image[0, CHANNEL_OBSTACLE, y, x]
+                apple = image[0, CHANNEL_APPLE, y, x] * 2 + 0.5
+                obstacle = image[0, CHANNEL_OBSTACLE, y, x] * 2 + 0.5
                 color = tkinter_rgb (apple, obstacle, 0)
                 canvas.create_rectangle (x * SCALE, y * SCALE, (x + 1) * SCALE, (y + 1) * SCALE, fill = color)
 
