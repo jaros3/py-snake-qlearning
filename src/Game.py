@@ -1,6 +1,7 @@
 from collections import defaultdict
 from typing import Dict, Tuple
 from tkinter import Canvas, StringVar
+from time import time
 import statistics
 
 from pos import Pos
@@ -15,6 +16,7 @@ class Game:
     LEARN_PERIOD = 5
 
     def __init__ (self) -> None:
+        self.time_started = time ()
         self.score = 0
         self.attempt = 0
         self.age = 0
@@ -37,9 +39,10 @@ class Game:
             self.brain.draw (canvas, self.board.snake.head)
 
     def set_text (self, text: StringVar) -> None:
-        hours = self.seconds // 3600
-        minutes = self.seconds // 60 % 60
-        seconds = self.seconds % 60
+        time_elapsed = int (time () - self.time_started)
+        hours = time_elapsed // 3600
+        minutes = time_elapsed // 60 % 60
+        seconds = time_elapsed % 60
         avg_ages = statistics.mean (self.attempt_ages.values ()) if self.attempt_ages else 0
         avg_apples = statistics.mean (self.attempt_apples.values ()) if self.attempt_apples else 0
         text.set (f'Attempt: {self.attempt} | Time: {hours:02d}:{minutes:02d}:{seconds:02d}\n' +

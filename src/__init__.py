@@ -37,11 +37,4 @@ with game.brain.session.as_default ():
 
     window.after (10, game_body)
 
-
-    def second_elapsed ():
-        game.seconds += 1
-        window.after (1000, second_elapsed)
-
-    window.after (1000, second_elapsed)
-
     window.mainloop ()

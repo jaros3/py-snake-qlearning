@@ -178,12 +178,11 @@ class Brain:
 
     def tiny_brain (self, input: kl.Layer) -> kl.Layer:
         current = input
-        current = self.conv2d_bn (current, 16, (3, 3), 2, 'valid', name = 'conv1')  # (16, 20, 20)
-        current = self.conv2d_bn (current, 24, (3, 3), 1, 'valid', name = 'conv2')  # (24, 18, 18)
-        current = kl.AveragePooling2D ((2, 2), 2, 'valid', name = 'avg_pool') (current)  # (24, 9, 9)
-        current = self.conv2d_bn (current, 32, (3, 3), 1, 'valid', name = 'conv3')  # (32, 7, 7)
-        current = self.conv2d_bn (current, 64, (3, 3), 2, 'valid', name = 'conv4')  # (64, 3, 3)
-        current = kl.AveragePooling2D ((3, 3), 1, 'valid', name = 'final_avg_pool') (current)  # (64, 1, 1)
+        current = self.conv2d_bn (current, 8, (3, 3), 1, 'valid', name = 'conv1')  # (8, 39, 39)
+        current = self.conv2d_bn (current, 16, (3, 3), 2, 'valid', name = 'conv2')  # (16, 19, 19)
+        current = self.conv2d_bn (current, 32, (3, 3), 2, 'valid', name = 'conv3')  # (32, 9, 9)
+        current = self.conv2d_bn (current, 64, (3, 3), 2, 'valid', name = 'conv4')  # (64, 4, 4)
+        current = kl.AveragePooling2D ((4, 4), 1, 'valid', name = 'final_avg_pool') (current)  # (64, 1, 1)
         current = kl.Conv2D (
             self.ACTIONS, (1, 1), 1, 'valid', name = 'final_fully_connected') (current)  # (4, 1, 1)
         return current
