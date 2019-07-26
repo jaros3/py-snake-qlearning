@@ -9,6 +9,7 @@ import numpy as np
 from tkinter import Canvas
 
 from const import *
+from iterators import first
 from color import tkinter_rgb
 from pos import Pos
 from dir import Dir
@@ -42,11 +43,20 @@ class Brain:
         action_values = current
         self.estimate_actions = tf.keras.Model (inputs = self.sight_input, outputs = action_values)
         self.estimate_actions.summary ()
+
         layer: kl.Layer
-        self.observed_layers: List[tf.Tensor] = [layer.output
-                                                 for layer in self.estimate_actions.layers
-                                                 if isinstance (layer, kl.BatchNormalization)] + [current]
-        self.observe_activations = tf.keras.Model (inputs = self.sight_input, outputs = self.observed_layers)
+        first_layer = first (first (layer.variables)
+                             for layer in self.estimate_actions.layers
+                             if isinstance (layer, kl.Conv2D))
+        last_layer = [layer
+                      for layer in self.estimate_actions.layers
+                      if isinstance (layer, kl.Conv2D)][-1]
+        self.observed_layers: List[kl.Layer] = \
+            [layer
+             for layer in self.estimate_actions.layers
+             if isinstance (layer, kl.BatchNormalization)] + [last_layer]
+        observed_outputs: List[tf.Tensor] = [layer.output for layer in self.observed_layers]
+        self.observe_activations = tf.keras.Model (inputs = self.sight_input, outputs = observed_outputs)
 
         self.mask = kl.Input (shape = (self.ACTIONS, 1, 1))
         self.total_future_rewards = kl.Input (shape = (1, 1, 1))
@@ -163,7 +173,7 @@ class Brain:
 
     def display_activations (self, sight: np.ndarray) -> List[np.ndarray]:
         return self.observe_activations.predict (sight)
-        # return self.session.run (self.observed_layers, feed_dict = { self.sight_input: sight_input })
+        # return self.session.run (self.observed_outputs, feed_dict = { self.sight_input: sight_input })
 
 
     def tiny_brain (self, input: kl.Layer) -> kl.Layer:

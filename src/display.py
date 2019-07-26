@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow.keras.layers as kl
 from tkinter import Canvas, Frame, Label
 from typing import List, NamedTuple, Optional
 from PIL import Image, ImageTk
@@ -18,9 +19,10 @@ class Display:
     SPACING = 1
     TRACK_STEPS = 10
 
-    def __init__ (self, displays: 'Displays', frame: Frame, output: tf.Tensor):
+    def __init__ (self, displays: 'Displays', frame: Frame, layer: kl.Layer):
         self.displays = displays
-        self.output = output
+        self.layer = layer
+        self.output = layer.output
 
         batch, self.channels, self.output_height, self.output_width = self.output.shape
         self.scale = 40 // self.output_width
@@ -37,9 +39,9 @@ class Display:
 
         self.target = tf.placeholder (tf.float32, shape = self.output.shape)
         brain = self.displays.brain
-        layer_index = [i
-                       for i, layer in enumerate (brain.estimate_actions.layers)
-                       if layer.output is output][0]
+        layer_index = next ((i
+                             for i, layer in enumerate (brain.estimate_actions.layers)
+                             if layer is self.layer))
         loss = tf.losses.mean_squared_error (brain.visual_brain.layers[layer_index].output, self.target)
         optimizer = tf.train.AdamOptimizer (0.1)
         self.optimizer_step = optimizer.minimize (loss, var_list = [brain.sight_var])
